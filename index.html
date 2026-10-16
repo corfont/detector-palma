@@ -47,7 +47,7 @@
   /* Pantalla de resultado */
   #resultado {
     position: fixed; inset: 0; z-index: 10; display: none;
-    flex-direction: column; align-items: center; justify-content: center;
+    flex-direction: column; align-items: center; justify-content: flex-start;
     text-align: center; padding: 24px; overflow-y: auto; color: #fff;
   }
   #resultado.visible { display: flex; }
@@ -60,6 +60,22 @@
   #resultado h2 { font-size: 2.4rem; margin: 12px 0 6px; line-height: 1.1; }
   #resultado .producto { font-size: 1.2rem; font-weight: 600; margin: 4px 0; }
   #resultado .origen { font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; opacity: .85; margin-top: 6px; }
+  /* centrado vertical que no corta el contenido cuando la pantalla es corta */
+  #resultado > :first-child { margin-top: auto; }
+  #resultado > :last-child { margin-bottom: auto; }
+
+  /* Ingreso manual de ingredientes */
+  .manual { display: none; width: 100%; max-width: 520px; margin: 14px 0 6px; text-align: left; }
+  .manual label { display: block; font-weight: 600; margin-bottom: 6px; }
+  .manual textarea {
+    width: 100%; font: inherit; padding: 12px; border-radius: 12px; border: 0;
+    background: rgba(0,0,0,.3); color: #fff; resize: vertical;
+  }
+  .manual textarea::placeholder { color: rgba(255,255,255,.6); }
+  .manual .tipos { display: flex; gap: 16px; margin: 10px 0; flex-wrap: wrap; }
+  .manual .tipos label { display: flex; align-items: center; font-weight: 400; margin: 0; }
+  .manual input[type=radio] { flex: none; width: auto; padding: 0; margin-right: 6px; }
+  .manual button { max-width: none; }
   #resultado .ingredientes {
     background: rgba(0,0,0,.25); border-radius: 12px; padding: 12px; margin: 14px 0;
     max-width: 520px; font-size: .95rem; line-height: 1.45; text-align: left;
@@ -137,6 +153,15 @@
   <div id="rOrigen" class="origen"></div>
   <div id="rProducto" class="producto"></div>
   <div id="rIngredientes" class="ingredientes"></div>
+  <div id="manual" class="manual">
+    <label for="ingManual">¿Tienes el envase? Escribe o pega los ingredientes:</label>
+    <textarea id="ingManual" rows="4" placeholder="Ej. Aqua, Glycerin, Sodium Palmate…"></textarea>
+    <div class="tipos">
+      <label><input type="radio" name="tipoManual" value="alimento" checked> Alimento</label>
+      <label><input type="radio" name="tipoManual" value="cosmetico"> Cosmético / higiene</label>
+    </div>
+    <button id="btnRevisar">Revisar ingredientes</button>
+  </div>
   <button id="btnCerrar">Escanear otro producto</button>
 </div>
 
@@ -237,9 +262,10 @@
   }
 
   /* ---------- PANTALLA DE RESULTADO ---------- */
-  function mostrarResultado(tipo, producto, texto, origen) {
+  function mostrarResultado(tipo, producto, texto, origen, aviso) {
     const cont = $("resultado");
     cont.className = "visible " + tipo;
+    $("manual").style.display = tipo === "nodata" ? "block" : "none";
 
     $("rOrigen").textContent = origen === "cosmetico" ? "Cosmético / higiene personal"
       : origen === "alimento" ? "Alimento" : "";
@@ -277,12 +303,13 @@
       $("rIcono").textContent = "❓";
       $("rTitulo").textContent = producto
         ? "Este producto no tiene ingredientes registrados"
-        : "Producto no encontrado en las bases de datos";
+        : (aviso || "Producto no encontrado en las bases de datos");
     }
   }
 
   function cerrarResultado() {
     detenerSirena();
+    $("ingManual").value = "";
     $("resultado").className = "";
     ocupado = false;
     iniciarEscaneo();
@@ -291,9 +318,17 @@
   /* ---------- CONSULTA A OPEN FOOD FACTS / OPEN BEAUTY FACTS ---------- */
   async function consultar(base, codigo) {
     const campos = "product_name,brands,ingredients_text,ingredients_text_es,ingredients_analysis_tags,image_front_small_url";
-    const resp = await fetch(base + "/api/v2/product/" + encodeURIComponent(codigo) + ".json?fields=" + campos);
-    const datos = await resp.json();
-    return datos.status === 1 && datos.product ? datos.product : null;
+    // Devuelve el producto, o null si la base responde "no existe".
+    // Si la base no responde (sin red, caída, tarda más de 8 s) lanza un error.
+    const ctrl = new AbortController();
+    const limite = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const resp = await fetch(base + "/api/v2/product/" + encodeURIComponent(codigo) + ".json?fields=" + campos, { signal: ctrl.signal });
+      const datos = await resp.json();
+      return datos.status === 1 && datos.product ? datos.product : null;
+    } finally {
+      clearTimeout(limite);
+    }
   }
 
   async function buscarProducto(codigo) {
@@ -301,15 +336,19 @@
     $("estado").textContent = "Buscando " + codigo + "…";
     try {
       let origen = "alimento";
-      let producto = await consultar("https://world.openfoodfacts.org", codigo);
+      let producto = null;
+      let fallo = false; // true si alguna base no respondió (distinto de "no encontrado")
+      try { producto = await consultar("https://world.openfoodfacts.org", codigo); } catch (e) { fallo = true; }
       if (!producto) {
         // No es un alimento: probamos en la base de cosméticos e higiene personal
         $("estado").textContent = "No es un alimento. Buscando en cosméticos…";
         origen = "cosmetico";
-        try { producto = await consultar("https://world.openbeautyfacts.org", codigo); } catch (e) { producto = null; }
+        try { producto = await consultar("https://world.openbeautyfacts.org", codigo); } catch (e) { fallo = true; }
       }
       if (!producto) {
-        mostrarResultado("nodata", null, "", null);
+        mostrarResultado("nodata", null, "", null, fallo
+          ? "No se pudo consultar la base de datos"
+          : "Producto no encontrado en las bases de datos");
       } else {
         const { tipo, texto } = analizar(producto, origen);
         mostrarResultado(tipo, producto, texto, origen);
@@ -423,6 +462,14 @@
 
   /* ---------- EVENTOS ---------- */
   $("btnEscanear").addEventListener("click", iniciarEscaneo);
+  $("btnRevisar").addEventListener("click", () => {
+    const texto = $("ingManual").value.trim();
+    if (!texto) return;
+    const origen = document.querySelector('input[name="tipoManual"]:checked').value;
+    detenerSirena();
+    const { tipo } = analizar({ ingredients_text: texto }, origen);
+    mostrarResultado(tipo, null, texto, origen);
+  });
   $("btnCerrar").addEventListener("click", cerrarResultado);
   $("btnManual").addEventListener("click", () => {
     iniciarAudio();
