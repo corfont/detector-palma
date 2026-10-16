@@ -59,6 +59,7 @@
   #resultado .icono { font-size: 6rem; line-height: 1; }
   #resultado h2 { font-size: 2.4rem; margin: 12px 0 6px; line-height: 1.1; }
   #resultado .producto { font-size: 1.2rem; font-weight: 600; margin: 4px 0; }
+  #resultado .origen { font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; opacity: .85; margin-top: 6px; }
   #resultado .ingredientes {
     background: rgba(0,0,0,.25); border-radius: 12px; padding: 12px; margin: 14px 0;
     max-width: 520px; font-size: .95rem; line-height: 1.45; text-align: left;
@@ -106,7 +107,8 @@
       <button id="btnManual" class="sec">Buscar</button>
     </div>
     <small class="nota">
-      Los datos vienen de <b>Open Food Facts</b>, una base de datos abierta y colaborativa.
+      Los datos vienen de <b>Open Food Facts</b> (alimentos) y <b>Open Beauty Facts</b> (pasta dental,
+      shampoo, jabón y otros cosméticos), bases de datos abiertas y colaborativas.
       Si un producto no aparece, es que nadie lo ha registrado todavía.
     </small>
   </div>
@@ -132,6 +134,7 @@
   <div id="rIcono" class="icono"></div>
   <h2 id="rTitulo"></h2>
   <div id="rImagen"></div>
+  <div id="rOrigen" class="origen"></div>
   <div id="rProducto" class="producto"></div>
   <div id="rIngredientes" class="ingredientes"></div>
   <button id="btnCerrar">Escanear otro producto</button>
@@ -197,15 +200,27 @@
   }
 
   /* ---------- ANÁLISIS DE INGREDIENTES ---------- */
-  const rePalma = /aceites?\s+de\s+palma|palmiste|palmist|palm\s*(oil|kernel|fat)|\bpalma\b/i;
-  const reVegetal = /(grasas?|aceites?)\s+vegetal(es)?|vegetable\s+(fat|oil)s?/i;
+  // Alimentos: "aceite de palma" casi siempre aparece con su nombre; lo dudoso es "grasa vegetal".
+  // Cosméticos: los ingredientes usan nombres técnicos (INCI) y muchos derivados de la palma.
+  //   palma = nombres que son de palma sí o sí; duda = derivados que pueden venir de palma o de otra fuente.
+  const REGLAS = {
+    alimento: {
+      palma: /aceites?\s+de\s+palma|palmiste|palmist|palm\s*(oil|kernel|fat)|\bpalma\b/i,
+      duda: /(grasas?|aceites?)\s+vegetal(es)?|vegetable\s+(fat|oil)s?/i
+    },
+    cosmetico: {
+      palma: /elaeis\s+guineensis|palm\s*kernel|palm\s*oil|aceites?\s+de\s+palma|palmiste|palmist|\bpalm\b/i,
+      duda: /palm(ate|itate|itic|itoyl|ityl|itamide|itamine)/i
+    }
+  };
 
-  function analizar(producto) {
+  function analizar(producto, origen) {
+    const reglas = REGLAS[origen] || REGLAS.alimento;
     const texto = (producto.ingredients_text_es || producto.ingredients_text || "").trim();
     const etiquetas = producto.ingredients_analysis_tags || [];
 
-    if (etiquetas.includes("en:palm-oil") || rePalma.test(texto)) return { tipo: "palma", texto };
-    if (etiquetas.includes("en:may-contain-palm-oil") || reVegetal.test(texto)) return { tipo: "duda", texto };
+    if (etiquetas.includes("en:palm-oil") || reglas.palma.test(texto)) return { tipo: "palma", texto };
+    if (etiquetas.includes("en:may-contain-palm-oil") || reglas.duda.test(texto)) return { tipo: "duda", texto };
     if (!texto) return { tipo: "nodata", texto };
     return { tipo: "libre", texto };
   }
@@ -214,16 +229,20 @@
     return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
-  function resaltar(texto) {
+  function resaltar(texto, origen) {
+    const reglas = REGLAS[origen] || REGLAS.alimento;
     const seguro = escapar(texto);
-    const re = new RegExp(rePalma.source + "|" + reVegetal.source, "gi");
+    const re = new RegExp(reglas.palma.source + "|" + reglas.duda.source, "gi");
     return seguro.replace(re, (m) => "<mark>" + m + "</mark>");
   }
 
   /* ---------- PANTALLA DE RESULTADO ---------- */
-  function mostrarResultado(tipo, producto, texto) {
+  function mostrarResultado(tipo, producto, texto, origen) {
     const cont = $("resultado");
     cont.className = "visible " + tipo;
+
+    $("rOrigen").textContent = origen === "cosmetico" ? "Cosmético / higiene personal"
+      : origen === "alimento" ? "Alimento" : "";
 
     const nombre = producto
       ? [producto.product_name, producto.brands].filter(Boolean).join(" · ")
@@ -235,7 +254,7 @@
 
     const ing = $("rIngredientes");
     ing.style.display = texto ? "block" : "none";
-    ing.innerHTML = texto ? "<b>Ingredientes:</b> " + resaltar(texto) : "";
+    ing.innerHTML = texto ? "<b>Ingredientes:</b> " + resaltar(texto, origen) : "";
 
     if (tipo === "palma") {
       $("rIcono").textContent = "🚨";
@@ -244,7 +263,9 @@
       if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]);
     } else if (tipo === "duda") {
       $("rIcono").textContent = "⚠️";
-      $("rTitulo").textContent = "Cuidado: dice «grasa vegetal» y no aclara cuál";
+      $("rTitulo").textContent = origen === "cosmetico"
+        ? "Posible derivado de palma: puede venir de palma o de otra fuente"
+        : "Cuidado: dice «grasa vegetal» y no aclara cuál";
       pitido(520, 0.25);
       setTimeout(() => pitido(520, 0.25), 350);
     } else if (tipo === "libre") {
@@ -256,7 +277,7 @@
       $("rIcono").textContent = "❓";
       $("rTitulo").textContent = producto
         ? "Este producto no tiene ingredientes registrados"
-        : "Producto no encontrado en la base de datos";
+        : "Producto no encontrado en las bases de datos";
     }
   }
 
@@ -267,20 +288,31 @@
     iniciarEscaneo();
   }
 
-  /* ---------- CONSULTA A OPEN FOOD FACTS ---------- */
+  /* ---------- CONSULTA A OPEN FOOD FACTS / OPEN BEAUTY FACTS ---------- */
+  async function consultar(base, codigo) {
+    const campos = "product_name,brands,ingredients_text,ingredients_text_es,ingredients_analysis_tags,image_front_small_url";
+    const resp = await fetch(base + "/api/v2/product/" + encodeURIComponent(codigo) + ".json?fields=" + campos);
+    const datos = await resp.json();
+    return datos.status === 1 && datos.product ? datos.product : null;
+  }
+
   async function buscarProducto(codigo) {
     ocupado = true;
     $("estado").textContent = "Buscando " + codigo + "…";
-    const campos = "product_name,brands,ingredients_text,ingredients_text_es,ingredients_analysis_tags,image_front_small_url";
-    const url = "https://world.openfoodfacts.org/api/v2/product/" + encodeURIComponent(codigo) + ".json?fields=" + campos;
     try {
-      const resp = await fetch(url);
-      const datos = await resp.json();
-      if (datos.status !== 1 || !datos.product) {
-        mostrarResultado("nodata", null, "");
+      let origen = "alimento";
+      let producto = await consultar("https://world.openfoodfacts.org", codigo);
+      if (!producto) {
+        // No es un alimento: probamos en la base de cosméticos e higiene personal
+        $("estado").textContent = "No es un alimento. Buscando en cosméticos…";
+        origen = "cosmetico";
+        try { producto = await consultar("https://world.openbeautyfacts.org", codigo); } catch (e) { producto = null; }
+      }
+      if (!producto) {
+        mostrarResultado("nodata", null, "", null);
       } else {
-        const { tipo, texto } = analizar(datos.product);
-        mostrarResultado(tipo, datos.product, texto);
+        const { tipo, texto } = analizar(producto, origen);
+        mostrarResultado(tipo, producto, texto, origen);
       }
       $("estado").textContent = "";
     } catch (e) {
