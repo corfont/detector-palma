@@ -53,6 +53,7 @@
   #resultado.visible { display: flex; }
   #resultado.palma { background: var(--rojo); animation: parpadeo .6s infinite alternate; }
   #resultado.duda { background: var(--amarillo); color: #1f1300; }
+  #resultado.suave { background: #ffe08a; color: #1f1300; }
   #resultado.libre { background: var(--verde); }
   #resultado.nodata { background: var(--gris); }
   @keyframes parpadeo { from { background: #d90429; } to { background: #7a0016; } }
@@ -60,6 +61,9 @@
   #resultado h2 { font-size: 2.4rem; margin: 12px 0 6px; line-height: 1.1; }
   #resultado .producto { font-size: 1.2rem; font-weight: 600; margin: 4px 0; }
   #resultado .origen { font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; opacity: .85; margin-top: 6px; }
+  #resultado .fotoIng { max-width: 520px; margin: 10px 0 0; }
+  #resultado .fotoIng img { height: auto; max-width: 100%; max-height: 28vh; margin-bottom: 4px; }
+  #resultado .fotoIng .pie { font-size: .85rem; opacity: .9; }
   /* centrado vertical que no corta el contenido cuando la pantalla es corta */
   #resultado > :first-child { margin-top: auto; }
   #resultado > :last-child { margin-bottom: auto; }
@@ -81,9 +85,9 @@
     max-width: 520px; font-size: .95rem; line-height: 1.45; text-align: left;
     max-height: 30vh; overflow-y: auto;
   }
-  #resultado.duda .ingredientes { background: rgba(255,255,255,.45); }
+  #resultado.duda .ingredientes, #resultado.suave .ingredientes { background: rgba(255,255,255,.45); }
   #resultado mark { background: #fff; color: var(--rojo); font-weight: 800; border-radius: 4px; padding: 0 3px; }
-  #resultado.duda mark { background: #1f1300; color: var(--amarillo); }
+  #resultado.duda mark, #resultado.suave mark { background: #1f1300; color: var(--amarillo); }
   #resultado img { height: 90px; border-radius: 10px; background: #fff; margin-bottom: 6px; }
   #resultado button { max-width: 360px; background: #fff; color: #111; margin-top: 6px; }
 
@@ -152,6 +156,7 @@
   <div id="rImagen"></div>
   <div id="rOrigen" class="origen"></div>
   <div id="rProducto" class="producto"></div>
+  <div id="rFotoIng" class="fotoIng"></div>
   <div id="rIngredientes" class="ingredientes"></div>
   <div id="manual" class="manual">
     <label for="ingManual">¿Tienes el envase? Escribe o pega los ingredientes:</label>
@@ -227,7 +232,8 @@
   /* ---------- ANÁLISIS DE INGREDIENTES ---------- */
   // Alimentos: "aceite de palma" casi siempre aparece con su nombre; lo dudoso es "grasa vegetal".
   // Cosméticos: los ingredientes usan nombres técnicos (INCI) y muchos derivados de la palma.
-  //   palma = nombres que son de palma sí o sí; duda = derivados que pueden venir de palma o de otra fuente.
+  //   palma = nombres que son de palma sí o sí; duda = derivados que pueden venir de palma o de otra fuente;
+  //   suave = ingredientes muy comunes que a menudo se fabrican con palma (la etiqueta no lo dice).
   const REGLAS = {
     alimento: {
       palma: /aceites?\s+de\s+palma|palmiste|palmist|palm\s*(oil|kernel|fat)|\bpalma\b/i,
@@ -235,9 +241,14 @@
     },
     cosmetico: {
       palma: /elaeis\s+guineensis|palm\s*kernel|palm\s*oil|aceites?\s+de\s+palma|palmiste|palmist|\bpalm\b/i,
-      duda: /palm(ate|itate|itic|itoyl|ityl|itamide|itamine)/i
+      duda: /palm(ate|itate|itic|itoyl|ityl|itamide|itamine)/i,
+      suave: /stearic\s+acid|stearate|(cetyl|cetearyl|stearyl)\s+alcohol|sodium\s+(lauryl|laureth)\s+sulfate|ammonium\s+lauryl\s+sulfate|caprylic\/capric\s+triglyceride|lauric\s+acid/i
     }
   };
+
+  function tieneIngredientes(p) {
+    return !!(p && (p.ingredients_text_es || p.ingredients_text || "").trim());
+  }
 
   function analizar(producto, origen) {
     const reglas = REGLAS[origen] || REGLAS.alimento;
@@ -246,6 +257,7 @@
 
     if (etiquetas.includes("en:palm-oil") || reglas.palma.test(texto)) return { tipo: "palma", texto };
     if (etiquetas.includes("en:may-contain-palm-oil") || reglas.duda.test(texto)) return { tipo: "duda", texto };
+    if (reglas.suave && reglas.suave.test(texto)) return { tipo: "suave", texto };
     if (!texto) return { tipo: "nodata", texto };
     return { tipo: "libre", texto };
   }
@@ -254,10 +266,14 @@
     return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
-  function resaltar(texto, origen) {
+  // Resalta solo lo que corresponde al nivel del resultado (en rojo no se marcan los ingredientes "suaves")
+  function resaltar(texto, origen, tipo) {
     const reglas = REGLAS[origen] || REGLAS.alimento;
     const seguro = escapar(texto);
-    const re = new RegExp(reglas.palma.source + "|" + reglas.duda.source, "gi");
+    const partes = [reglas.palma.source];
+    if (tipo !== "palma") partes.push(reglas.duda.source);
+    if (tipo === "suave" && reglas.suave) partes.push(reglas.suave.source);
+    const re = new RegExp(partes.join("|"), "gi");
     return seguro.replace(re, (m) => "<mark>" + m + "</mark>");
   }
 
@@ -278,9 +294,17 @@
       ? '<img alt="" src="' + escapar(producto.image_front_small_url) + '">'
       : "";
 
+    // Si la ficha no trae los ingredientes escritos pero sí su foto, la mostramos para poder leerla
+    const urlFoto = producto && producto.image_ingredients_url;
+    const urlPrev = producto && (producto.image_ingredients_small_url || producto.image_ingredients_url);
+    $("rFotoIng").innerHTML = tipo === "nodata" && /^https:\/\//.test(urlFoto || "") && /^https:\/\//.test(urlPrev || "")
+      ? '<a href="' + escapar(urlFoto) + '" target="_blank" rel="noopener"><img alt="Foto de los ingredientes" src="' + escapar(urlPrev) + '"></a>'
+        + '<div class="pie">Foto de los ingredientes en la base de datos. Tócala para ampliarla y copia el texto abajo.</div>'
+      : "";
+
     const ing = $("rIngredientes");
     ing.style.display = texto ? "block" : "none";
-    ing.innerHTML = texto ? "<b>Ingredientes:</b> " + resaltar(texto, origen) : "";
+    ing.innerHTML = texto ? "<b>Ingredientes:</b> " + resaltar(texto, origen, tipo) : "";
 
     if (tipo === "palma") {
       $("rIcono").textContent = "🚨";
@@ -294,6 +318,10 @@
         : "Cuidado: dice «grasa vegetal» y no aclara cuál";
       pitido(520, 0.25);
       setTimeout(() => pitido(520, 0.25), 350);
+    } else if (tipo === "suave") {
+      $("rIcono").textContent = "🟡";
+      $("rTitulo").textContent = "Ojo: tiene ingredientes que a menudo se fabrican con palma";
+      pitido(660, 0.22);
     } else if (tipo === "libre") {
       $("rIcono").textContent = "✅";
       $("rTitulo").textContent = "No se detecta aceite de palma";
@@ -317,7 +345,7 @@
 
   /* ---------- CONSULTA A OPEN FOOD FACTS / OPEN BEAUTY FACTS ---------- */
   async function consultar(base, codigo) {
-    const campos = "product_name,brands,ingredients_text,ingredients_text_es,ingredients_analysis_tags,image_front_small_url";
+    const campos = "product_name,brands,ingredients_text,ingredients_text_es,ingredients_analysis_tags,image_front_small_url,image_ingredients_url,image_ingredients_small_url";
     // Devuelve el producto, o null si la base responde "no existe".
     // Si la base no responde (sin red, caída, tarda más de 8 s) lanza un error.
     const ctrl = new AbortController();
@@ -335,21 +363,26 @@
     ocupado = true;
     $("estado").textContent = "Buscando " + codigo + "…";
     try {
-      let origen = "alimento";
-      let producto = null;
       let fallo = false; // true si alguna base no respondió (distinto de "no encontrado")
-      try { producto = await consultar("https://world.openfoodfacts.org", codigo); } catch (e) { fallo = true; }
-      if (!producto) {
-        // No es un alimento: probamos en la base de cosméticos e higiene personal
-        $("estado").textContent = "No es un alimento. Buscando en cosméticos…";
-        origen = "cosmetico";
-        try { producto = await consultar("https://world.openbeautyfacts.org", codigo); } catch (e) { fallo = true; }
+      let alimento = null;
+      let cosmetico = null;
+      try { alimento = await consultar("https://world.openfoodfacts.org", codigo); } catch (e) { fallo = true; }
+      if (!tieneIngredientes(alimento)) {
+        // No es un alimento, o su ficha no trae ingredientes: probamos en cosméticos e higiene personal
+        $("estado").textContent = "Buscando en cosméticos…";
+        try { cosmetico = await consultar("https://world.openbeautyfacts.org", codigo); } catch (e) { fallo = true; }
       }
-      if (!producto) {
+      // Nos quedamos con la ficha que tenga ingredientes; si ninguna, con la que tenga al menos su foto
+      const candidatos = [[alimento, "alimento"], [cosmetico, "cosmetico"]].filter((c) => c[0]);
+      const elegido = candidatos.find((c) => tieneIngredientes(c[0]))
+        || candidatos.find((c) => c[0].image_ingredients_url)
+        || candidatos[0];
+      if (!elegido) {
         mostrarResultado("nodata", null, "", null, fallo
           ? "No se pudo consultar la base de datos"
           : "Producto no encontrado en las bases de datos");
       } else {
+        const [producto, origen] = elegido;
         const { tipo, texto } = analizar(producto, origen);
         mostrarResultado(tipo, producto, texto, origen);
       }
