@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>¿Tiene aceite de palma?</title>
+<style>
+  :root {
+    --rojo: #d90429;
+    --verde: #1b9e4b;
+    --amarillo: #f4b400;
+    --gris: #5c677d;
+    --fondo: #0f172a;
+    --tarjeta: #1e293b;
+    --texto: #f1f5f9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--fondo);
+    color: var(--texto);
+    min-height: 100vh;
+  }
+  header { padding: 20px 16px 8px; text-align: center; }
+  header h1 { margin: 0; font-size: 1.6rem; }
+  header p { margin: 6px 0 0; color: #94a3b8; font-size: .95rem; }
+  main { max-width: 520px; margin: 0 auto; padding: 12px 16px 40px; }
+  .tarjeta { background: var(--tarjeta); border-radius: 16px; padding: 16px; margin-top: 14px; }
+  #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; min-height: 0; }
+  button {
+    font: inherit; font-weight: 700; border: 0; border-radius: 12px;
+    padding: 14px 18px; cursor: pointer; width: 100%;
+    background: #3b82f6; color: #fff; font-size: 1.05rem;
+  }
+  button.sec { background: #334155; }
+  button:disabled { opacity: .5; }
+  .fila { display: flex; gap: 8px; margin-top: 10px; }
+  input {
+    flex: 1; font: inherit; padding: 12px; border-radius: 12px; border: 1px solid #475569;
+    background: #0f172a; color: var(--texto); min-width: 0;
+  }
+  .fila button { width: auto; }
+  #estado { margin: 10px 0 0; color: #94a3b8; font-size: .95rem; text-align: center; min-height: 1.3em; }
+  small.nota { display: block; margin-top: 10px; color: #94a3b8; line-height: 1.4; }
+
+  /* Pantalla de resultado */
+  #resultado {
+    position: fixed; inset: 0; z-index: 10; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; overflow-y: auto; color: #fff;
+  }
+  #resultado.visible { display: flex; }
+  #resultado.palma { background: var(--rojo); animation: parpadeo .6s infinite alternate; }
+  #resultado.duda { background: var(--amarillo); color: #1f1300; }
+  #resultado.libre { background: var(--verde); }
+  #resultado.nodata { background: var(--gris); }
+  @keyframes parpadeo { from { background: #d90429; } to { background: #7a0016; } }
+  #resultado .icono { font-size: 6rem; line-height: 1; }
+  #resultado h2 { font-size: 2.4rem; margin: 12px 0 6px; line-height: 1.1; }
+  #resultado .producto { font-size: 1.2rem; font-weight: 600; margin: 4px 0; }
+  #resultado .ingredientes {
+    background: rgba(0,0,0,.25); border-radius: 12px; padding: 12px; margin: 14px 0;
+    max-width: 520px; font-size: .95rem; line-height: 1.45; text-align: left;
+    max-height: 30vh; overflow-y: auto;
+  }
+  #resultado.duda .ingredientes { background: rgba(255,255,255,.45); }
+  #resultado mark { background: #fff; color: var(--rojo); font-weight: 800; border-radius: 4px; padding: 0 3px; }
+  #resultado.duda mark { background: #1f1300; color: var(--amarillo); }
+  #resultado img { height: 90px; border-radius: 10px; background: #fff; margin-bottom: 6px; }
+  #resultado button { max-width: 360px; background: #fff; color: #111; margin-top: 6px; }
+
+  /* Logo en la cabecera */
+  #logoCab { display: none; height: 64px; max-width: 80%; margin: 0 auto 8px; object-fit: contain; }
+
+  /* Marca de agua: queda por encima de todo, sin bloquear toques */
+  #marcaAgua {
+    position: fixed; inset: 0; z-index: 20; pointer-events: none;
+    display: none; align-items: center; justify-content: center;
+  }
+  #marcaAgua img {
+    width: 70vmin; max-width: 420px; opacity: .12;
+    transform: rotate(-15deg); object-fit: contain;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <img id="logoCab" alt="Logo">
+  <h1>🌴 Detector de aceite de palma</h1>
+  <p>Escanea el código de barras de un producto</p>
+</header>
+
+<main>
+  <div class="tarjeta">
+    <div id="reader"></div>
+    <button id="btnEscanear" style="margin-top:12px">📷 Escanear producto</button>
+    <p id="estado"></p>
+  </div>
+
+  <div class="tarjeta">
+    <strong>¿Sin cámara o no se lee?</strong>
+    <div class="fila">
+      <input id="codigoManual" type="text" inputmode="numeric" placeholder="Escribe el código (ej. 3017620422003)">
+      <button id="btnManual" class="sec">Buscar</button>
+    </div>
+    <small class="nota">
+      Los datos vienen de <b>Open Food Facts</b>, una base de datos abierta y colaborativa.
+      Si un producto no aparece, es que nadie lo ha registrado todavía.
+    </small>
+  </div>
+
+  <div class="tarjeta">
+    <strong>Logo del proyecto</strong>
+    <div class="fila">
+      <button id="btnLogo" class="sec">🖼️ Elegir logo</button>
+      <button id="btnQuitarLogo" class="sec">Quitar</button>
+    </div>
+    <input id="archivoLogo" type="file" accept="image/*" hidden>
+    <small class="nota">
+      El logo sale arriba y como marca de agua tenue en toda la pantalla.
+      Lo que elijas aquí se guarda solo en este celular. Para que quede fijo para todos,
+      sube un archivo llamado <b>logo.png</b> junto a este HTML.
+    </small>
+  </div>
+</main>
+
+<div id="marcaAgua"><img id="marcaImg" alt=""></div>
+
+<div id="resultado" role="alert" aria-live="assertive">
+  <div id="rIcono" class="icono"></div>
+  <h2 id="rTitulo"></h2>
+  <div id="rImagen"></div>
+  <div id="rProducto" class="producto"></div>
+  <div id="rIngredientes" class="ingredientes"></div>
+  <button id="btnCerrar">Escanear otro producto</button>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+
+  let scanner = null;
+  let ocupado = false;      // true mientras se consulta o se muestra un resultado
+  let audioCtx = null;
+  let sirena = { osc: null, timer: null, fin: null };
+
+  /* ---------- SONIDO (Web Audio API) ---------- */
+  function iniciarAudio() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  }
+
+  function detenerSirena() {
+    clearInterval(sirena.timer);
+    clearTimeout(sirena.fin);
+    if (sirena.osc) { try { sirena.osc.stop(); } catch (e) {} sirena.osc = null; }
+  }
+
+  function sonarSirena() {
+    if (!audioCtx) return;
+    detenerSirena();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "square";
+    gain.gain.value = 0.3;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    let alto = false;
+    const cambiar = () => {
+      osc.frequency.setValueAtTime(alto ? 950 : 600, audioCtx.currentTime);
+      alto = !alto;
+    };
+    cambiar();
+    sirena.osc = osc;
+    sirena.timer = setInterval(cambiar, 300);
+    sirena.fin = setTimeout(detenerSirena, 6000); // se apaga sola a los 6 s
+  }
+
+  function pitido(frecuencia, duracion) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = frecuencia;
+    gain.gain.value = 0.25;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duracion);
+  }
+
+  /* ---------- ANÁLISIS DE INGREDIENTES ---------- */
+  const rePalma = /aceites?\s+de\s+palma|palmiste|palmist|palm\s*(oil|kernel|fat)|\bpalma\b/i;
+  const reVegetal = /(grasas?|aceites?)\s+vegetal(es)?|vegetable\s+(fat|oil)s?/i;
+
+  function analizar(producto) {
+    const texto = (producto.ingredients_text_es || producto.ingredients_text || "").trim();
+    const etiquetas = producto.ingredients_analysis_tags || [];
+
+    if (etiquetas.includes("en:palm-oil") || rePalma.test(texto)) return { tipo: "palma", texto };
+    if (etiquetas.includes("en:may-contain-palm-oil") || reVegetal.test(texto)) return { tipo: "duda", texto };
+    if (!texto) return { tipo: "nodata", texto };
+    return { tipo: "libre", texto };
+  }
+
+  function escapar(s) {
+    return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function resaltar(texto) {
+    const seguro = escapar(texto);
+    const re = new RegExp(rePalma.source + "|" + reVegetal.source, "gi");
+    return seguro.replace(re, (m) => "<mark>" + m + "</mark>");
+  }
+
+  /* ---------- PANTALLA DE RESULTADO ---------- */
+  function mostrarResultado(tipo, producto, texto) {
+    const cont = $("resultado");
+    cont.className = "visible " + tipo;
+
+    const nombre = producto
+      ? [producto.product_name, producto.brands].filter(Boolean).join(" · ")
+      : "";
+    $("rProducto").textContent = nombre;
+    $("rImagen").innerHTML = producto && producto.image_front_small_url
+      ? '<img alt="" src="' + escapar(producto.image_front_small_url) + '">'
+      : "";
+
+    const ing = $("rIngredientes");
+    ing.style.display = texto ? "block" : "none";
+    ing.innerHTML = texto ? "<b>Ingredientes:</b> " + resaltar(texto) : "";
+
+    if (tipo === "palma") {
+      $("rIcono").textContent = "🚨";
+      $("rTitulo").textContent = "¡CONTIENE ACEITE DE PALMA!";
+      sonarSirena();
+      if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]);
+    } else if (tipo === "duda") {
+      $("rIcono").textContent = "⚠️";
+      $("rTitulo").textContent = "Cuidado: dice «grasa vegetal» y no aclara cuál";
+      pitido(520, 0.25);
+      setTimeout(() => pitido(520, 0.25), 350);
+    } else if (tipo === "libre") {
+      $("rIcono").textContent = "✅";
+      $("rTitulo").textContent = "No se detecta aceite de palma";
+      pitido(880, 0.2);
+      setTimeout(() => pitido(1175, 0.3), 220);
+    } else {
+      $("rIcono").textContent = "❓";
+      $("rTitulo").textContent = producto
+        ? "Este producto no tiene ingredientes registrados"
+        : "Producto no encontrado en la base de datos";
+    }
+  }
+
+  function cerrarResultado() {
+    detenerSirena();
+    $("resultado").className = "";
+    ocupado = false;
+    iniciarEscaneo();
+  }
+
+  /* ---------- CONSULTA A OPEN FOOD FACTS ---------- */
+  async function buscarProducto(codigo) {
+    ocupado = true;
+    $("estado").textContent = "Buscando " + codigo + "…";
+    const campos = "product_name,brands,ingredients_text,ingredients_text_es,ingredients_analysis_tags,image_front_small_url";
+    const url = "https://world.openfoodfacts.org/api/v2/product/" + encodeURIComponent(codigo) + ".json?fields=" + campos;
+    try {
+      const resp = await fetch(url);
+      const datos = await resp.json();
+      if (datos.status !== 1 || !datos.product) {
+        mostrarResultado("nodata", null, "");
+      } else {
+        const { tipo, texto } = analizar(datos.product);
+        mostrarResultado(tipo, datos.product, texto);
+      }
+      $("estado").textContent = "";
+    } catch (e) {
+      ocupado = false;
+      $("estado").textContent = "No se pudo consultar. Revisa tu conexión a internet.";
+    }
+  }
+
+  /* ---------- CÁMARA / CÓDIGO DE BARRAS ---------- */
+  async function detenerEscaneo() {
+    if (scanner && scanner.isScanning) {
+      try { await scanner.stop(); } catch (e) {}
+    }
+  }
+
+  async function alLeerCodigo(codigo) {
+    if (ocupado) return;
+    ocupado = true;
+    await detenerEscaneo();
+    buscarProducto(codigo);
+  }
+
+  async function iniciarEscaneo() {
+    iniciarAudio(); // el navegador exige un toque del usuario antes de permitir sonido
+    if (!window.Html5Qrcode) {
+      $("estado").textContent = "No se cargó la librería del lector. Revisa tu conexión.";
+      return;
+    }
+    if (!scanner) {
+      scanner = new Html5Qrcode("reader", {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E
+        ],
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        verbose: false
+      });
+    }
+    if (scanner.isScanning) return;
+    try {
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 280, height: 140 } },
+        alLeerCodigo,
+        () => {}
+      );
+      $("estado").textContent = "Apunta al código de barras del producto";
+    } catch (e) {
+      $("estado").textContent = "No se pudo abrir la cámara. Da permiso al navegador o usa el código manual.";
+    }
+  }
+
+  /* ---------- LOGO Y MARCA DE AGUA ---------- */
+  function ponerLogo(src) {
+    ["logoCab", "marcaImg"].forEach((id) => {
+      const img = $(id);
+      img.onload = () => {
+        img.style.display = "block";
+        if (id === "marcaImg") $("marcaAgua").style.display = "flex";
+      };
+      img.onerror = () => {
+        img.style.display = "none";
+        if (id === "marcaImg") $("marcaAgua").style.display = "none";
+      };
+      img.src = src;
+    });
+  }
+
+  function leerLogoGuardado() {
+    try { return localStorage.getItem("logoPersonal"); } catch (e) { return null; }
+  }
+
+  // Reduce la imagen a 400 px como máximo para que quepa en el almacenamiento del navegador
+  function reducirImagen(archivo, cb) {
+    const lector = new FileReader();
+    lector.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const escala = Math.min(1, 400 / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * escala);
+        c.height = Math.round(img.height * escala);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        cb(c.toDataURL("image/png"));
+      };
+      img.src = lector.result;
+    };
+    lector.readAsDataURL(archivo);
+  }
+
+  ponerLogo(leerLogoGuardado() || "logo.png");
+
+  $("btnLogo").addEventListener("click", () => $("archivoLogo").click());
+  $("archivoLogo").addEventListener("change", (e) => {
+    const archivo = e.target.files[0];
+    if (!archivo) return;
+    reducirImagen(archivo, (dataUrl) => {
+      try { localStorage.setItem("logoPersonal", dataUrl); } catch (err) {}
+      ponerLogo(dataUrl);
+    });
+  });
+  $("btnQuitarLogo").addEventListener("click", () => {
+    try { localStorage.removeItem("logoPersonal"); } catch (e) {}
+    ponerLogo("logo.png");
+  });
+
+  /* ---------- EVENTOS ---------- */
+  $("btnEscanear").addEventListener("click", iniciarEscaneo);
+  $("btnCerrar").addEventListener("click", cerrarResultado);
+  $("btnManual").addEventListener("click", () => {
+    iniciarAudio();
+    const codigo = $("codigoManual").value.replace(/\D/g, "");
+    if (codigo.length < 8) {
+      $("estado").textContent = "El código debe tener al menos 8 dígitos.";
+      return;
+    }
+    if (ocupado) return;
+    detenerEscaneo().then(() => buscarProducto(codigo));
+  });
+  $("codigoManual").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") $("btnManual").click();
+  });
+})();
+</script>
+</body>
+</html>
