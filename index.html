@@ -61,6 +61,14 @@
   #resultado h2 { font-size: 2.4rem; margin: 12px 0 6px; line-height: 1.1; }
   #resultado .producto { font-size: 1.2rem; font-weight: 600; margin: 4px 0; }
   #resultado .origen { font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; opacity: .85; margin-top: 6px; }
+  #resultado .evaluacion {
+    background: rgba(0,0,0,.25); border-radius: 12px; padding: 12px; margin: 12px 0 0;
+    width: 100%; max-width: 520px; text-align: left; font-size: .98rem; line-height: 1.5;
+  }
+  #resultado .evaluacion:empty { display: none; }
+  #resultado .evaluacion div + div { margin-top: 6px; }
+  #resultado.duda .evaluacion, #resultado.suave .evaluacion { background: rgba(255,255,255,.45); }
+  #resultado .editar { display: none; background: transparent; color: inherit; border: 2px solid currentColor; }
   #resultado .fotoIng { max-width: 520px; margin: 10px 0 0; }
   #resultado .fotoIng img { height: auto; max-width: 100%; max-height: 28vh; margin-bottom: 4px; }
   #resultado .fotoIng .pie { font-size: .85rem; opacity: .9; }
@@ -158,6 +166,7 @@
   <div id="rImagen"></div>
   <div id="rOrigen" class="origen"></div>
   <div id="rProducto" class="producto"></div>
+  <div id="rEvaluacion" class="evaluacion"></div>
   <div id="rFotoIng" class="fotoIng"></div>
   <div id="rIngredientes" class="ingredientes"></div>
   <div id="manual" class="manual">
@@ -172,6 +181,7 @@
     </div>
     <button id="btnRevisar">Revisar ingredientes</button>
   </div>
+  <button id="btnEditar" type="button" class="editar">✏️ Corregir el texto</button>
   <button id="btnCerrar">Escanear otro producto</button>
 </div>
 
@@ -283,11 +293,58 @@
     return seguro.replace(re, (m) => "<mark>" + m + "</mark>");
   }
 
+  // Separa la lista por comas o punto y coma, sin cortar lo que va entre paréntesis
+  function separarIngredientes(texto) {
+    const partes = [];
+    let actual = "";
+    let nivel = 0;
+    for (const ch of texto) {
+      if (ch === "(" || ch === "[") nivel++;
+      else if (ch === ")" || ch === "]") nivel = Math.max(0, nivel - 1);
+      if ((ch === "," || ch === ";") && nivel === 0) { partes.push(actual); actual = ""; } else actual += ch;
+    }
+    partes.push(actual);
+    return partes.map((p) => p.replace(/\s+/g, " ").replace(/^[\s.]+|[\s.]+$/g, "")).filter(Boolean);
+  }
+
+  // Resumen escrito: qué ingredientes se encontraron y en qué nivel
+  function evaluacion(tipo, texto, origen) {
+    if (!texto || tipo === "nodata") return "";
+    const reglas = REGLAS[origen] || REGLAS.alimento;
+    const piezas = separarIngredientes(texto);
+    // Cada ingrediente cuenta en un solo nivel: el más grave
+    const sinRepetir = (a) => a.filter((x, i) => a.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i);
+    const palma = sinRepetir(piezas.filter((p) => reglas.palma.test(p)));
+    const duda = sinRepetir(piezas.filter((p) => !reglas.palma.test(p) && reglas.duda.test(p)));
+    const suave = reglas.suave
+      ? sinRepetir(piezas.filter((p) => !reglas.palma.test(p) && !reglas.duda.test(p) && reglas.suave.test(p)))
+      : [];
+    const lista = (a) => a.map((x) => "<b>" + escapar(x) + "</b>").join("; ");
+    const filas = [];
+
+    if (tipo === "libre") {
+      filas.push("✅ Se revisaron " + piezas.length + " ingredientes y ninguno se asocia a la palma.");
+    } else {
+      if (palma.length) filas.push("🔴 Es de palma: " + lista(palma));
+      else if (tipo === "palma") filas.push("🔴 La base de datos marca este producto como con aceite de palma.");
+      if (duda.length) filas.push("🟠 " + (origen === "cosmetico" ? "Posibles derivados de palma: " : "No aclara su origen: ") + lista(duda));
+      else if (tipo === "duda") filas.push("🟠 La base de datos indica que podría contener aceite de palma.");
+      if (suave.length) filas.push("🟡 Suelen fabricarse con palma: " + lista(suave));
+    }
+    if (origen === "cosmetico" && /parfum|fragrance/i.test(texto)) {
+      filas.push("ℹ️ «Parfum / Fragrance» no detalla sus componentes, así que no se puede revisar.");
+    }
+    return filas.map((f) => "<div>" + f + "</div>").join("");
+  }
+
   /* ---------- PANTALLA DE RESULTADO ---------- */
   function mostrarResultado(tipo, producto, texto, origen, aviso, fuente) {
     const cont = $("resultado");
     cont.className = "visible " + tipo;
     $("manual").style.display = tipo === "nodata" ? "block" : "none";
+    $("rEvaluacion").innerHTML = evaluacion(tipo, texto, origen);
+    // El botón de corregir solo aparece cuando el texto se escribió o se leyó de una foto
+    $("btnEditar").style.display = !producto && tipo !== "nodata" ? "block" : "none";
 
     $("rOrigen").textContent = (origen === "cosmetico" ? "Cosmético / higiene personal"
       : origen === "alimento" ? "Alimento" : "")
@@ -502,6 +559,24 @@
     ponerLogo("logo.png");
   });
 
+  /* ---------- REVISAR EL TEXTO ESCRITO O LEÍDO DE UNA FOTO ---------- */
+  function revisarIngredientes() {
+    const texto = $("ingManual").value.trim();
+    if (!texto) return;
+    const origen = document.querySelector('input[name="tipoManual"]:checked').value;
+    detenerSirena();
+    const { tipo } = analizar({ ingredients_text: texto }, origen);
+    mostrarResultado(tipo, null, texto, origen, undefined, textoDeFoto ? "foto" : undefined);
+  }
+
+  // Vuelve al recuadro con el mismo texto, para corregir errores de lectura y revisar de nuevo
+  function volverAEditar() {
+    detenerSirena();
+    mostrarResultado("nodata", null, "", null, "Corrige el texto y vuelve a revisar");
+    $("rIcono").textContent = "✏️";
+    $("estadoOcr").textContent = "";
+  }
+
   /* ---------- LEER INGREDIENTES DE UNA FOTO (OCR) ---------- */
   // Tesseract.js corre en el propio celular. Se descarga solo cuando se usa (unos MB la primera vez).
   let cargaTesseract = null;
@@ -584,8 +659,8 @@
       if (reParecenCosmetico.test(texto)) {
         document.querySelector('input[name="tipoManual"][value="cosmetico"]').checked = true;
       }
-      estado.textContent = "Texto leído. Revísalo, corrige lo que esté mal y toca «Revisar ingredientes».";
-      $("ingManual").scrollIntoView({ block: "center", behavior: "smooth" });
+      estado.textContent = "";
+      revisarIngredientes(); // evalúa de inmediato; si hay errores de lectura, "Corregir el texto" lo permite
     } catch (err) {
       estado.textContent = "No se pudo leer la foto. Revisa tu internet e intenta de nuevo, o escribe los ingredientes.";
     } finally {
@@ -595,14 +670,8 @@
 
   /* ---------- EVENTOS ---------- */
   $("btnEscanear").addEventListener("click", iniciarEscaneo);
-  $("btnRevisar").addEventListener("click", () => {
-    const texto = $("ingManual").value.trim();
-    if (!texto) return;
-    const origen = document.querySelector('input[name="tipoManual"]:checked').value;
-    detenerSirena();
-    const { tipo } = analizar({ ingredients_text: texto }, origen);
-    mostrarResultado(tipo, null, texto, origen, undefined, textoDeFoto ? "foto" : undefined);
-  });
+  $("btnRevisar").addEventListener("click", revisarIngredientes);
+  $("btnEditar").addEventListener("click", volverAEditar);
   $("btnCerrar").addEventListener("click", cerrarResultado);
   $("btnManual").addEventListener("click", () => {
     iniciarAudio();
