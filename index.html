@@ -68,6 +68,14 @@
   #resultado .evaluacion:empty { display: none; }
   #resultado .evaluacion div + div { margin-top: 6px; }
   #resultado.duda .evaluacion, #resultado.suave .evaluacion { background: rgba(255,255,255,.45); }
+  /* Aviso RSPO: tarjeta clara con borde verde para que se distinga sobre cualquier color de fondo */
+  #resultado .rspo {
+    background: rgba(255,255,255,.93); color: #0b3d2e; border-left: 6px solid #1b9e4b;
+    border-radius: 12px; padding: 12px; margin: 12px 0 0;
+    width: 100%; max-width: 520px; text-align: left; font-size: .95rem; line-height: 1.45;
+  }
+  #resultado .rspo:empty { display: none; }
+  #resultado .rspo .nota { display: block; margin-top: 6px; font-size: .85rem; color: #3b5a4f; }
   #resultado .editar { display: none; background: transparent; color: inherit; border: 2px solid currentColor; }
   #resultado .fotoIng { max-width: 520px; margin: 10px 0 0; }
   #resultado .fotoIng img { height: auto; max-width: 100%; max-height: 28vh; margin-bottom: 4px; }
@@ -167,6 +175,7 @@
   <div id="rOrigen" class="origen"></div>
   <div id="rProducto" class="producto"></div>
   <div id="rEvaluacion" class="evaluacion"></div>
+  <div id="rRspo" class="rspo"></div>
   <div id="rFotoIng" class="fotoIng"></div>
   <div id="rIngredientes" class="ingredientes"></div>
   <div id="manual" class="manual">
@@ -293,6 +302,31 @@
     return seguro.replace(re, (m) => "<mark>" + m + "</mark>");
   }
 
+  // Certificación RSPO (aceite de palma sostenible). Se busca en las etiquetas (labels_tags) del producto
+  // cualquiera que mencione RSPO o "sustainable palm oil", sin depender de un nombre exacto.
+  // Es información limitada: muy pocos productos la tienen registrada en las bases de datos.
+  function detectarRspo(producto) {
+    const etiquetas = (producto && producto.labels_tags) || [];
+    const rspo = etiquetas.filter((t) => /rspo|roundtable-on-sustainable-palm-oil|sustainable-palm-oil/i.test(t));
+    if (!rspo.length) return null;
+    const junto = rspo.join(" ").toLowerCase();
+    let modelo = "";
+    if (/identity[-_ ]?preserved/.test(junto)) modelo = "identidad preservada (el más estricto)";
+    else if (/segregat/.test(junto)) modelo = "segregado";
+    else if (/mass[-_ ]?balance/.test(junto)) modelo = "balance de masa (se mezcla con aceite común)";
+    else if (/book[-_ ]?and[-_ ]?claim|credit/.test(junto)) modelo = "sistema de créditos";
+    return { modelo };
+  }
+
+  function avisoRspo(producto) {
+    const r = detectarRspo(producto);
+    if (!r) return "";
+    return "<div>🌱 <b>Certificación RSPO registrada</b>" + (r.modelo ? " — modelo: " + escapar(r.modelo) : "") + ".</div>"
+      + '<span class="nota">Significa que el aceite de palma de este producto declara ser de origen sostenible; '
+      + "no significa que no tenga palma. Información limitada: muy pocos productos tienen esta etiqueta registrada "
+      + "en la base de datos, así que si no aparece este aviso no quiere decir que el producto no la tenga.</span>";
+  }
+
   // Separa la lista por comas o punto y coma, sin cortar lo que va entre paréntesis
   function separarIngredientes(texto) {
     const partes = [];
@@ -343,6 +377,7 @@
     cont.className = "visible " + tipo;
     $("manual").style.display = tipo === "nodata" ? "block" : "none";
     $("rEvaluacion").innerHTML = evaluacion(tipo, texto, origen);
+    $("rRspo").innerHTML = avisoRspo(producto);
     // El botón de corregir solo aparece cuando el texto se escribió o se leyó de una foto
     $("btnEditar").style.display = !producto && tipo !== "nodata" ? "block" : "none";
 
@@ -411,7 +446,7 @@
 
   /* ---------- CONSULTA A OPEN FOOD FACTS / OPEN BEAUTY FACTS ---------- */
   async function consultar(base, codigo) {
-    const campos = "product_name,brands,ingredients_text,ingredients_text_es,ingredients_analysis_tags,image_front_small_url,image_ingredients_url,image_ingredients_small_url";
+    const campos = "product_name,brands,ingredients_text,ingredients_text_es,ingredients_analysis_tags,image_front_small_url,image_ingredients_url,image_ingredients_small_url,labels_tags";
     // Devuelve el producto, o null si la base responde "no existe".
     // Si la base no responde (sin red, caída, tarda más de 8 s) lanza un error.
     const ctrl = new AbortController();
