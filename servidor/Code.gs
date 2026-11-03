@@ -120,7 +120,9 @@ function doPost(e) {
     }
     const previa = fila > 0 ? datos[fila - 1] : null;
 
-    const urlFrente = fotoFrente ? guardarFoto_(fotoFrente, codigo + '_caratula.jpg') : (previa ? previa[COL['Foto carátula']] : '');
+    const urlOff = /^https:\/\/[a-z0-9.-]*open(food|beauty)facts\.org\/\S+$/i.test(String(d.fotoFrenteUrl || '')) ? String(d.fotoFrenteUrl).slice(0, 400) : '';
+    const urlFrente = fotoFrente ? guardarFoto_(fotoFrente, codigo + '_caratula.jpg')
+      : (previa && previa[COL['Foto carátula']] ? previa[COL['Foto carátula']] : urlOff);
     const urlIng = fotoIng ? guardarFoto_(fotoIng, codigo + '_ingredientes.jpg') : (previa ? previa[COL['Foto ingredientes']] : '');
 
     const registro = [];

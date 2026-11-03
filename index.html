@@ -289,7 +289,7 @@
   const $ = (id) => document.getElementById(id);
 
   let codigoActual = null;  // código de barras del producto que se está mostrando
-  let infoActual = { nombre: "", marca: "" };
+  let infoActual = { nombre: "", marca: "", foto: "" };
   let datosDe = "";         // de dónde salieron los datos: "Open Food Facts", "base del curso", etc.
   let fotoIngPendiente = ""; // foto de ingredientes tomada en la pantalla de resultado, para adjuntarla al guardar
   let avisoSinCaratula = false;
@@ -543,7 +543,7 @@
   function cerrarResultado() {
     detenerSirena();
     codigoActual = null;
-    infoActual = { nombre: "", marca: "" };
+    infoActual = { nombre: "", marca: "", foto: "" };
     datosDe = "";
     fotoIngPendiente = "";
     $("guardar").classList.remove("visible");
@@ -623,7 +623,7 @@
   async function buscarProducto(codigo) {
     ocupado = true;
     codigoActual = codigo;
-    infoActual = { nombre: "", marca: "" };
+    infoActual = { nombre: "", marca: "", foto: "" };
     datosDe = "";
     $("estado").textContent = "Buscando " + codigo + "…";
     try {
@@ -631,7 +631,7 @@
       if (enBase && (enBase.ingredientes || "").trim()) {
         const producto = productoDeBase(enBase);
         const origen = enBase.tipo === "cosmetico" ? "cosmetico" : "alimento";
-        infoActual = { nombre: enBase.nombre || "", marca: enBase.marca || "" };
+        infoActual = { nombre: enBase.nombre || "", marca: enBase.marca || "", foto: /^https:\/\//.test(enBase.fotoFrente || "") ? enBase.fotoFrente : "" };
         datosDe = "base del curso";
         const { tipo, texto } = analizar(producto, origen);
         mostrarResultado(tipo, producto, texto, origen, undefined, "base");
@@ -658,7 +658,7 @@
           : "Producto no encontrado en las bases de datos");
       } else {
         const [producto, origen] = elegido;
-        infoActual = { nombre: producto.product_name || "", marca: producto.brands || "" };
+        infoActual = { nombre: producto.product_name || "", marca: producto.brands || "", foto: /^https:\/\//.test(producto.image_front_small_url || "") ? producto.image_front_small_url : "" };
         datosDe = origen === "cosmetico" ? "Open Beauty Facts" : "Open Food Facts";
         const { tipo, texto } = analizar(producto, origen);
         mostrarResultado(tipo, producto, texto, origen);
@@ -1008,6 +1008,8 @@
     fotoIngData = fotoIngPendiente;
     avisoSinCaratula = false;
     ["prevFrente", "prevIng"].forEach((id) => { $(id).style.display = "none"; $(id).removeAttribute("src"); });
+    $("btnFotoFrente").textContent = infoActual.foto ? "📷 Cambiar foto de la carátula" : "📷 Foto de la carátula";
+    if (infoActual.foto) { $("prevFrente").src = infoActual.foto; $("prevFrente").style.display = "block"; }
     if (fotoIngData) { $("prevIng").src = fotoIngData; $("prevIng").style.display = "block"; }
     $("gCodigo").textContent = codigoActual;
     $("gNombre").value = infoActual.nombre;
@@ -1060,7 +1062,7 @@
     const nombre = $("gNombre").value.trim();
     const estado = $("gEstado");
     if (nombre.length < 2) { estado.textContent = "Escribe el nombre del producto."; $("gNombre").focus(); return; }
-    if (!fotoFrenteData && !avisoSinCaratula) {
+    if (!fotoFrenteData && !infoActual.foto && !avisoSinCaratula) {
       avisoSinCaratula = true;
       estado.textContent = "⚠️ Falta la foto de la carátula. Tómala con el botón de arriba, o toca Guardar otra vez para guardar sin ella.";
       return;
@@ -1082,7 +1084,7 @@
 
     if (!BASE_URL) {
       estado.textContent = "✅ Guardado en este celular. Falta conectar el servidor para compartirlo con la clase.";
-      infoActual = { nombre, marca: registro.marca };
+      infoActual = { nombre, marca: registro.marca, foto: fotoFrenteData || infoActual.foto };
       return;
     }
     $("btnGuardarOk").disabled = true;
@@ -1091,18 +1093,19 @@
       const resp = await fetch(BASE_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" }, // sin "preflight": Apps Script no lo admite
-        body: JSON.stringify(Object.assign({ clave: CFG.CLAVE || "", fotoFrente: fotoFrenteData, fotoIngredientes: fotoIngData }, registro))
+        body: JSON.stringify(Object.assign({ clave: CFG.CLAVE || "", fotoFrente: fotoFrenteData, fotoIngredientes: fotoIngData,
+          fotoFrenteUrl: fotoFrenteData ? "" : infoActual.foto }, registro))
       });
       const r = await resp.json();
       if (!r.ok) throw new Error(r.error || "error");
       cacheBase = null;
-      infoActual = { nombre, marca: registro.marca };
+      infoActual = { nombre, marca: registro.marca, foto: fotoFrenteData || infoActual.foto };
       $("guardar").classList.remove("visible");
       $("rTitulo").dataset.guardado = "1";
       const aviso = document.createElement("div");
       aviso.className = "evaluacion";
       aviso.textContent = (r.actualizado ? "✅ Producto actualizado en la base del curso" : "✅ Producto guardado en la base del curso")
-        + (fotoFrenteData ? " con la foto de la carátula." : ". Sin foto de la carátula: escanéalo otra vez y toca Guardar para agregarla.");
+        + (fotoFrenteData || infoActual.foto ? " con la foto de la carátula." : ". Sin foto de la carátula: escanéalo otra vez y toca Guardar para agregarla.");
       $("rEvaluacion").prepend(aviso);
     } catch (err) {
       $("btnGuardarOk").disabled = false;
