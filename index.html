@@ -633,6 +633,19 @@
         const origen = enBase.tipo === "cosmetico" ? "cosmetico" : "alimento";
         infoActual = { nombre: enBase.nombre || "", marca: enBase.marca || "", foto: /^https:\/\//.test(enBase.fotoFrente || "") ? enBase.fotoFrente : "" };
         datosDe = "base del curso";
+        if (!infoActual.foto) {
+          // La ficha de la clase no tiene carátula: probamos si Open Food Facts / Open Beauty Facts la tienen
+          for (const url of ["https://world.openfoodfacts.org", "https://world.openbeautyfacts.org"]) {
+            try {
+              const o = await consultar(url, codigo);
+              if (o && /^https:\/\//.test(o.image_front_small_url || "")) {
+                infoActual.foto = o.image_front_small_url;
+                producto.image_front_small_url = o.image_front_small_url;
+                break;
+              }
+            } catch (e) { /* sin red: seguimos sin foto */ }
+          }
+        }
         const { tipo, texto } = analizar(producto, origen);
         mostrarResultado(tipo, producto, texto, origen, undefined, "base");
         $("estado").textContent = "";
