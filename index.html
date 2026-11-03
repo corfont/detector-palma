@@ -197,19 +197,6 @@
     <a href="base.html" class="boton">Ver los productos escaneados</a>
   </div>
 
-  <div class="tarjeta">
-    <strong>Logo del proyecto</strong>
-    <div class="fila">
-      <button id="btnLogo" class="sec">🖼️ Elegir logo</button>
-      <button id="btnQuitarLogo" class="sec">Quitar</button>
-    </div>
-    <input id="archivoLogo" type="file" accept="image/*" hidden>
-    <small class="nota">
-      El logo sale arriba y como marca de agua tenue en toda la pantalla.
-      Lo que elijas aquí se guarda solo en este celular. Para que quede fijo para todos,
-      sube un archivo llamado <b>logo.png</b> junto a este HTML.
-    </small>
-  </div>
 </main>
 
 <div id="marcaAgua"><img id="marcaImg" alt=""></div>
@@ -808,43 +795,7 @@
     });
   }
 
-  function leerLogoGuardado() {
-    try { return localStorage.getItem("logoPersonal"); } catch (e) { return null; }
-  }
-
-  // Reduce la imagen a 400 px como máximo para que quepa en el almacenamiento del navegador
-  function reducirImagen(archivo, cb) {
-    const lector = new FileReader();
-    lector.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const escala = Math.min(1, 400 / Math.max(img.width, img.height));
-        const c = document.createElement("canvas");
-        c.width = Math.round(img.width * escala);
-        c.height = Math.round(img.height * escala);
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-        cb(c.toDataURL("image/png"));
-      };
-      img.src = lector.result;
-    };
-    lector.readAsDataURL(archivo);
-  }
-
-  ponerLogo(leerLogoGuardado() || "logo.png");
-
-  $("btnLogo").addEventListener("click", () => $("archivoLogo").click());
-  $("archivoLogo").addEventListener("change", (e) => {
-    const archivo = e.target.files[0];
-    if (!archivo) return;
-    reducirImagen(archivo, (dataUrl) => {
-      try { localStorage.setItem("logoPersonal", dataUrl); } catch (err) {}
-      ponerLogo(dataUrl);
-    });
-  });
-  $("btnQuitarLogo").addEventListener("click", () => {
-    try { localStorage.removeItem("logoPersonal"); } catch (e) {}
-    ponerLogo("logo.png");
-  });
+  ponerLogo("logo.png");
 
   /* ---------- REVISAR EL TEXTO ESCRITO O LEÍDO DE UNA FOTO ---------- */
   function revisarIngredientes() {
