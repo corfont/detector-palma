@@ -40,6 +40,10 @@
     background: #3b82f6; color: #fff; font-size: 1.05rem;
   }
   button.sec { background: #334155; }
+  a.boton {
+    display: block; margin-top: 10px; padding: 14px 18px; border-radius: 12px; text-align: center;
+    background: #334155; color: #fff; font-weight: 700; text-decoration: none;
+  }
   button:disabled { opacity: .5; }
   .fila { display: flex; gap: 8px; margin-top: 10px; }
   input {
@@ -115,6 +119,33 @@
   #resultado img { height: 90px; border-radius: 10px; background: #fff; margin-bottom: 6px; }
   #resultado button { max-width: 360px; background: #fff; color: #111; margin-top: 6px; }
 
+  #resultado .guardar { display: none; background: #111; color: #fff; }
+  #resultado .enlaceOff {
+    display: none; max-width: 360px; width: 100%; margin-top: 10px; padding: 10px;
+    color: inherit; font-weight: 600; text-decoration: underline; text-align: center;
+  }
+
+  /* Ventana para guardar en la base del curso */
+  #guardar { position: fixed; inset: 0; z-index: 15; display: none; background: var(--fondo); overflow-y: auto; padding: 16px; }
+  #guardar.visible { display: block; }
+  #guardar .caja { max-width: 520px; margin: 0 auto; }
+  #guardar h2 { margin: 4px 0 8px; font-size: 1.4rem; }
+  #guardar label { display: block; margin: 12px 0 4px; font-weight: 600; }
+  #guardar input[type=text] { width: 100%; flex: none; }
+  #guardar textarea {
+    width: 100%; font: inherit; padding: 12px; border-radius: 12px; border: 1px solid #475569;
+    background: #0f172a; color: var(--texto); resize: vertical;
+  }
+  #guardar .fotos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  #guardar .fotos button { font-size: .9rem; padding: 12px 8px; }
+  #guardar .fotos img { display: none; width: 100%; height: 110px; object-fit: cover; border-radius: 10px; margin-top: 6px; background: #000; }
+  #guardar .tipos { display: flex; gap: 16px; margin: 8px 0; flex-wrap: wrap; }
+  #guardar .tipos label { display: flex; align-items: center; font-weight: 400; margin: 0; }
+  #guardar input[type=radio] { flex: none; width: auto; margin-right: 6px; }
+  #guardar .veredicto { font-weight: 700; margin: 6px 0; min-height: 1.3em; }
+  #guardar .gEstado { min-height: 1.2em; margin: 8px 0; color: #cbd5e1; font-size: .92rem; }
+  #guardar button + button { margin-top: 8px; }
+
   /* Logo en la cabecera */
   #logoCab { display: none; height: 64px; max-width: 80%; margin: 0 auto 8px; object-fit: contain; }
 
@@ -158,6 +189,15 @@
   </div>
 
   <div class="tarjeta">
+    <strong>📚 Base del curso</strong>
+    <small class="nota">
+      Todos los productos que escaneamos y guardamos entre la clase, con su carátula y su resultado:
+      cuáles tienen palma, cuáles no y cuáles podrían tener.
+    </small>
+    <a href="base.html" class="boton">Ver los productos escaneados</a>
+  </div>
+
+  <div class="tarjeta">
     <strong>Logo del proyecto</strong>
     <div class="fila">
       <button id="btnLogo" class="sec">🖼️ Elegir logo</button>
@@ -196,14 +236,62 @@
     </div>
     <button id="btnRevisar">Revisar ingredientes</button>
   </div>
+  <button id="btnGuardar" type="button" class="guardar">💾 Guardar en la base del curso</button>
+  <a id="lnkOff" class="enlaceOff" target="_blank" rel="noopener">🌍 Completar en Open Food Facts (cuenta gratis)</a>
   <button id="btnEditar" type="button" class="editar">✏️ Corregir el texto</button>
   <button id="btnCerrar">Escanear otro producto</button>
 </div>
 
+<div id="guardar" role="dialog" aria-label="Guardar en la base del curso">
+  <div class="caja">
+    <h2>💾 Guardar en la base del curso</h2>
+    <p class="cod">Código: <b id="gCodigo"></b></p>
+
+    <label for="gNombre">Nombre del producto *</label>
+    <input id="gNombre" type="text" maxlength="120" placeholder="Ej. Mayonesa Alacena">
+    <label for="gMarca">Marca</label>
+    <input id="gMarca" type="text" maxlength="80" placeholder="Ej. Alacena">
+
+    <div class="fotos">
+      <div>
+        <button id="btnFotoFrente" type="button" class="sec">📷 Foto de la carátula</button>
+        <img id="prevFrente" alt="">
+      </div>
+      <div>
+        <button id="btnFotoIng" type="button" class="sec">📷 Foto de los ingredientes</button>
+        <img id="prevIng" alt="">
+      </div>
+    </div>
+    <input id="archFrente" type="file" accept="image/*" capture="environment" hidden>
+    <input id="archIng" type="file" accept="image/*" capture="environment" hidden>
+    <div id="gOcr" class="gEstado"></div>
+
+    <label for="gIng">Ingredientes (se leen de la foto; corrige si hace falta)</label>
+    <textarea id="gIng" rows="4" placeholder="Ej. Aceite de soya, agua, huevo, sal…"></textarea>
+    <div class="tipos">
+      <label><input type="radio" name="gTipo" value="alimento" checked> Alimento</label>
+      <label><input type="radio" name="gTipo" value="cosmetico"> Cosmético / higiene</label>
+    </div>
+    <div id="gVeredicto" class="veredicto"></div>
+
+    <label for="gAlumno">Tu nombre (opcional)</label>
+    <input id="gAlumno" type="text" maxlength="40" placeholder="Para saber quién lo escaneó">
+
+    <div id="gEstado" class="gEstado"></div>
+    <button id="btnGuardarOk" type="button">Guardar</button>
+    <button id="btnGuardarCancelar" type="button" class="sec">Cancelar</button>
+  </div>
+</div>
+
+<script src="config.js"></script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
 
+  let codigoActual = null;  // código de barras del producto que se está mostrando
+  let infoActual = { nombre: "", marca: "" };
+  let datosDe = "";         // de dónde salieron los datos: "Open Food Facts", "base del curso", etc.
+  let vista = { tipo: "nodata", producto: null, texto: "", origen: null, deFoto: false };
   let ocupado = false;      // true mientras se consulta o se muestra un resultado
   let textoDeFoto = false;  // true si el texto del recuadro salió de leer una foto
   let audioCtx = null;
@@ -345,18 +433,23 @@
     return partes.map((p) => p.replace(/\s+/g, " ").replace(/^[\s.]+|[\s.]+$/g, "")).filter(Boolean);
   }
 
-  // Resumen escrito: qué ingredientes se encontraron y en qué nivel
-  function evaluacion(tipo, texto, origen) {
-    if (!texto || tipo === "nodata") return "";
+  // Reparte los ingredientes por nivel. Cada ingrediente cuenta en un solo nivel: el más grave
+  function clasificar(texto, origen) {
     const reglas = REGLAS[origen] || REGLAS.alimento;
-    const piezas = separarIngredientes(texto);
-    // Cada ingrediente cuenta en un solo nivel: el más grave
+    const piezas = separarIngredientes(texto || "");
     const sinRepetir = (a) => a.filter((x, i) => a.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i);
     const palma = sinRepetir(piezas.filter((p) => reglas.palma.test(p)));
     const duda = sinRepetir(piezas.filter((p) => !reglas.palma.test(p) && reglas.duda.test(p)));
     const suave = reglas.suave
       ? sinRepetir(piezas.filter((p) => !reglas.palma.test(p) && !reglas.duda.test(p) && reglas.suave.test(p)))
       : [];
+    return { piezas, palma, duda, suave };
+  }
+
+  // Resumen escrito: qué ingredientes se encontraron y en qué nivel
+  function evaluacion(tipo, texto, origen) {
+    if (!texto || tipo === "nodata") return "";
+    const { piezas, palma, duda, suave } = clasificar(texto, origen);
     const lista = (a) => a.map((x) => "<b>" + escapar(x) + "</b>").join("; ");
     const filas = [];
 
@@ -379,6 +472,11 @@
   function mostrarResultado(tipo, producto, texto, origen, aviso, fuente) {
     const cont = $("resultado");
     cont.className = "visible " + tipo;
+    vista = { tipo, producto, texto, origen, deFoto: fuente === "foto" };
+    $("btnGuardar").style.display = codigoActual ? "block" : "none";
+    const off = origen === "cosmetico" ? "https://world.openbeautyfacts.org" : "https://world.openfoodfacts.org";
+    $("lnkOff").href = off + "/cgi/product.pl?type=add&code=" + encodeURIComponent(codigoActual || "");
+    $("lnkOff").style.display = codigoActual && datosDe !== "base del curso" ? "block" : "none";
     $("manual").style.display = tipo === "nodata" ? "block" : "none";
     $("rEvaluacion").innerHTML = evaluacion(tipo, texto, origen);
     $("rRspo").innerHTML = avisoRspo(producto);
@@ -387,7 +485,8 @@
 
     $("rOrigen").textContent = (origen === "cosmetico" ? "Cosmético / higiene personal"
       : origen === "alimento" ? "Alimento" : "")
-      + (fuente === "foto" ? " · texto leído de una foto (puede tener errores)" : "");
+      + (fuente === "foto" ? " · texto leído de una foto (puede tener errores)" : "")
+      + (fuente === "base" ? " · de la base del curso" : "");
 
     const nombre = producto
       ? [producto.product_name, producto.brands].filter(Boolean).join(" · ")
@@ -440,6 +539,10 @@
 
   function cerrarResultado() {
     detenerSirena();
+    codigoActual = null;
+    infoActual = { nombre: "", marca: "" };
+    datosDe = "";
+    $("guardar").classList.remove("visible");
     $("ingManual").value = "";
     $("estadoOcr").textContent = "";
     textoDeFoto = false;
@@ -464,10 +567,72 @@
     }
   }
 
+  /* ---------- BASE DEL CURSO (Google Sheets + Apps Script) ---------- */
+  const CFG = window.CONFIG || {};
+  const BASE_URL = CFG.BASE_URL || "";
+  let cacheBase = null;   // { hora, lista }
+
+  function leerLocal() {
+    try { return JSON.parse(localStorage.getItem("baseLocal") || "{}") || {}; } catch (e) { return {}; }
+  }
+  function guardarLocal(reg) {
+    const todo = leerLocal();
+    todo[reg.codigo] = reg;
+    try { localStorage.setItem("baseLocal", JSON.stringify(todo)); } catch (e) {}
+  }
+
+  async function listaRemota() {
+    if (!BASE_URL) return [];
+    if (cacheBase && Date.now() - cacheBase.hora < 60000) return cacheBase.lista;
+    const ctrl = new AbortController();
+    const limite = setTimeout(() => ctrl.abort(), 6000);
+    try {
+      const resp = await fetch(BASE_URL, { signal: ctrl.signal });
+      const datos = await resp.json();
+      const lista = datos.ok && Array.isArray(datos.productos) ? datos.productos : [];
+      cacheBase = { hora: Date.now(), lista };
+      return lista;
+    } finally {
+      clearTimeout(limite);
+    }
+  }
+
+  async function buscarEnBase(codigo) {
+    let remoto = [];
+    try { remoto = await listaRemota(); } catch (e) { /* si no responde seguimos con las otras bases */ }
+    return remoto.find((p) => p.codigo === codigo) || leerLocal()[codigo] || null;
+  }
+
+  // Convierte un registro de la base del curso al formato de Open Food Facts que ya sabe mostrar la pantalla
+  function productoDeBase(r) {
+    return {
+      product_name: r.nombre,
+      brands: r.marca,
+      ingredients_text: r.ingredientes,
+      image_front_small_url: /^https:\/\//.test(r.fotoFrente || "") ? r.fotoFrente : "",
+      image_ingredients_url: /^https:\/\//.test(r.fotoIngredientes || "") ? r.fotoIngredientes : "",
+      labels_tags: r.rspo ? ["en:roundtable-on-sustainable-palm-oil"] : []
+    };
+  }
+
   async function buscarProducto(codigo) {
     ocupado = true;
+    codigoActual = codigo;
+    infoActual = { nombre: "", marca: "" };
+    datosDe = "";
     $("estado").textContent = "Buscando " + codigo + "…";
     try {
+      const enBase = await buscarEnBase(codigo);
+      if (enBase && (enBase.ingredientes || "").trim()) {
+        const producto = productoDeBase(enBase);
+        const origen = enBase.tipo === "cosmetico" ? "cosmetico" : "alimento";
+        infoActual = { nombre: enBase.nombre || "", marca: enBase.marca || "" };
+        datosDe = "base del curso";
+        const { tipo, texto } = analizar(producto, origen);
+        mostrarResultado(tipo, producto, texto, origen, undefined, "base");
+        $("estado").textContent = "";
+        return;
+      }
       let fallo = false; // true si alguna base no respondió (distinto de "no encontrado")
       let alimento = null;
       let cosmetico = null;
@@ -488,6 +653,8 @@
           : "Producto no encontrado en las bases de datos");
       } else {
         const [producto, origen] = elegido;
+        infoActual = { nombre: producto.product_name || "", marca: producto.brands || "" };
+        datosDe = origen === "cosmetico" ? "Open Beauty Facts" : "Open Food Facts";
         const { tipo, texto } = analizar(producto, origen);
         mostrarResultado(tipo, producto, texto, origen);
       }
@@ -667,6 +834,7 @@
     if (!texto) return;
     const origen = document.querySelector('input[name="tipoManual"]:checked').value;
     detenerSirena();
+    if (!datosDe || datosDe === "base del curso") datosDe = textoDeFoto ? "foto de los ingredientes" : "texto escrito";
     const { tipo } = analizar({ ingredients_text: texto }, origen);
     mostrarResultado(tipo, null, texto, origen, undefined, textoDeFoto ? "foto" : undefined);
   }
@@ -769,6 +937,154 @@
       $("btnFoto").disabled = false;
     }
   });
+
+  /* ---------- GUARDAR EN LA BASE DEL CURSO ---------- */
+  let fotoFrenteData = "";
+  let fotoIngData = "";
+
+  // Foto reducida a JPEG (los celulares sacan fotos de varios MB) para guardarla y enviarla
+  function fotoADataUrl(archivo, lado, calidad) {
+    return new Promise((ok, mal) => {
+      const url = URL.createObjectURL(archivo);
+      const img = new Image();
+      img.onload = () => {
+        const escala = Math.min(1, lado / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * escala);
+        c.height = Math.round(img.height * escala);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        ok(c.toDataURL("image/jpeg", calidad));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); mal(new Error("foto no válida")); };
+      img.src = url;
+    });
+  }
+
+  function tipoElegido() {
+    return document.querySelector('input[name="gTipo"]:checked').value;
+  }
+
+  const ETIQUETA = { palma: "🔴 Contiene palma", duda: "🟠 Posible palma", suave: "🟡 Quizá tenga palma", libre: "✅ Sin palma detectada", nodata: "❓ Sin datos de ingredientes" };
+
+  function actualizarVeredicto() {
+    const texto = $("gIng").value.trim();
+    const { tipo } = analizar({ ingredients_text: texto }, tipoElegido());
+    $("gVeredicto").textContent = "Resultado: " + ETIQUETA[tipo];
+  }
+
+  function abrirGuardar() {
+    iniciarAudio();
+    detenerSirena();
+    fotoFrenteData = "";
+    fotoIngData = "";
+    ["prevFrente", "prevIng"].forEach((id) => { $(id).style.display = "none"; $(id).removeAttribute("src"); });
+    $("gCodigo").textContent = codigoActual;
+    $("gNombre").value = infoActual.nombre;
+    $("gMarca").value = infoActual.marca;
+    $("gIng").value = vista.texto || "";
+    $("gOcr").textContent = "";
+    $("gEstado").textContent = BASE_URL ? "" : "Aún no hay servidor de la base del curso: se guardará solo en este celular.";
+    $("btnGuardarOk").disabled = false;
+    document.querySelector('input[name="gTipo"][value="' + (vista.origen === "cosmetico" ? "cosmetico" : "alimento") + '"]').checked = true;
+    try { $("gAlumno").value = localStorage.getItem("alumno") || ""; } catch (e) {}
+    actualizarVeredicto();
+    $("guardar").classList.add("visible");
+  }
+
+  async function alElegirFoto(e, cual) {
+    const archivo = e.target.files[0];
+    e.target.value = "";
+    if (!archivo) return;
+    const estado = $("gOcr");
+    try {
+      const data = await fotoADataUrl(archivo, 1000, 0.7);
+      if (cual === "frente") { fotoFrenteData = data; $("prevFrente").src = data; $("prevFrente").style.display = "block"; return; }
+      fotoIngData = data;
+      $("prevIng").src = data;
+      $("prevIng").style.display = "block";
+      // La foto de los ingredientes también se lee para llenar el texto
+      $("btnFotoIng").disabled = true;
+      estado.textContent = "Preparando el lector de texto (la primera vez tarda un poco)…";
+      const lienzo = await prepararFoto(archivo);
+      const bruto = await leerTextoDeFoto(lienzo, (p) => { estado.textContent = "Leyendo ingredientes… " + p + "%"; });
+      const texto = limpiarTextoOCR(bruto);
+      if (texto.length < 15) {
+        estado.textContent = "La foto se guardó, pero no se pudo leer el texto. Acércate con buena luz o escribe los ingredientes.";
+        return;
+      }
+      $("gIng").value = texto;
+      if (reParecenCosmetico.test(texto)) document.querySelector('input[name="gTipo"][value="cosmetico"]').checked = true;
+      estado.textContent = "Texto leído de la foto. Revísalo y corrige los errores antes de guardar.";
+      actualizarVeredicto();
+    } catch (err) {
+      estado.textContent = cual === "frente"
+        ? "No se pudo usar la foto."
+        : "La foto se guardó, pero no se pudo leer el texto. Escribe los ingredientes.";
+    } finally {
+      $("btnFotoIng").disabled = false;
+    }
+  }
+
+  async function guardarProducto() {
+    const nombre = $("gNombre").value.trim();
+    const estado = $("gEstado");
+    if (nombre.length < 2) { estado.textContent = "Escribe el nombre del producto."; $("gNombre").focus(); return; }
+    const texto = $("gIng").value.trim();
+    const origen = tipoElegido();
+    const { tipo } = analizar({ ingredients_text: texto }, origen);
+    const { palma, duda, suave } = clasificar(texto, origen);
+    const alumno = $("gAlumno").value.trim();
+    try { localStorage.setItem("alumno", alumno); } catch (e) {}
+
+    const registro = {
+      codigo: codigoActual, nombre, marca: $("gMarca").value.trim(), tipo: origen, veredicto: tipo,
+      ingredientes: texto, palma, duda, suave,
+      rspo: !!(vista.producto && detectarRspo(vista.producto)),
+      fuente: datosDe || "manual", alumno
+    };
+    guardarLocal(registro); // copia en este celular, sin fotos
+
+    if (!BASE_URL) {
+      estado.textContent = "✅ Guardado en este celular. Falta conectar el servidor para compartirlo con la clase.";
+      infoActual = { nombre, marca: registro.marca };
+      return;
+    }
+    $("btnGuardarOk").disabled = true;
+    estado.textContent = "Guardando…";
+    try {
+      const resp = await fetch(BASE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, // sin "preflight": Apps Script no lo admite
+        body: JSON.stringify(Object.assign({ clave: CFG.CLAVE || "", fotoFrente: fotoFrenteData, fotoIngredientes: fotoIngData }, registro))
+      });
+      const r = await resp.json();
+      if (!r.ok) throw new Error(r.error || "error");
+      cacheBase = null;
+      infoActual = { nombre, marca: registro.marca };
+      $("guardar").classList.remove("visible");
+      $("rTitulo").dataset.guardado = "1";
+      const aviso = document.createElement("div");
+      aviso.className = "evaluacion";
+      aviso.textContent = r.actualizado ? "✅ Producto actualizado en la base del curso." : "✅ Producto guardado en la base del curso.";
+      $("rEvaluacion").prepend(aviso);
+    } catch (err) {
+      $("btnGuardarOk").disabled = false;
+      estado.textContent = err.message === "clave"
+        ? "La clave de config.js no coincide con la del servidor."
+        : "No se pudo guardar. Revisa tu internet e inténtalo otra vez.";
+    }
+  }
+
+  $("btnGuardar").addEventListener("click", abrirGuardar);
+  $("btnGuardarCancelar").addEventListener("click", () => $("guardar").classList.remove("visible"));
+  $("btnGuardarOk").addEventListener("click", guardarProducto);
+  $("btnFotoFrente").addEventListener("click", () => $("archFrente").click());
+  $("btnFotoIng").addEventListener("click", () => $("archIng").click());
+  $("archFrente").addEventListener("change", (e) => alElegirFoto(e, "frente"));
+  $("archIng").addEventListener("change", (e) => alElegirFoto(e, "ing"));
+  $("gIng").addEventListener("input", actualizarVeredicto);
+  document.querySelectorAll('input[name="gTipo"]').forEach((r) => r.addEventListener("change", actualizarVeredicto));
 
   /* ---------- EVENTOS ---------- */
   $("btnEscanear").addEventListener("click", iniciarEscaneo);

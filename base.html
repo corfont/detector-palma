@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Base del curso · Detector de aceite de palma</title>
+<style>
+  :root { --fondo:#0f172a; --tarjeta:#1e293b; --texto:#f1f5f9; --apagado:#94a3b8; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--fondo); color:var(--texto); }
+  header { padding:18px 16px 6px; text-align:center; }
+  header h1 { margin:0; font-size:1.5rem; }
+  header p { margin:6px 0 0; color:var(--apagado); }
+  main { max-width:1000px; margin:0 auto; padding:10px 16px 40px; }
+  a.volver { display:inline-block; color:#93c5fd; margin:8px 0; text-decoration:none; font-weight:600; }
+  .contadores { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin:10px 0; }
+  .cont { border:0; border-radius:14px; padding:12px 8px; color:#fff; font:inherit; cursor:pointer; text-align:center; opacity:.65; }
+  .cont.activo { opacity:1; outline:3px solid #fff; }
+  .cont b { display:block; font-size:2rem; line-height:1.1; }
+  .cont span { font-size:.85rem; }
+  .c-palma { background:#c1121f; } .c-duda { background:#d97706; } .c-suave { background:#a16207; }
+  .c-libre { background:#15803d; } .c-nodata { background:#475569; } .c-todos { background:#2563eb; }
+  .barra { display:flex; gap:8px; margin:12px 0; }
+  input[type=search] { flex:1; font:inherit; padding:12px; border-radius:12px; border:1px solid #475569; background:#0f172a; color:var(--texto); min-width:0; }
+  button.act { font:inherit; font-weight:700; border:0; border-radius:12px; padding:0 16px; background:#334155; color:#fff; cursor:pointer; }
+  #estado { color:var(--apagado); text-align:center; margin:14px 0; }
+  .rejilla { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
+  .prod { background:var(--tarjeta); border-radius:14px; overflow:hidden; border-top:6px solid #475569; display:flex; flex-direction:column; }
+  .prod.palma { border-color:#e5383b; } .prod.duda { border-color:#f59e0b; } .prod.suave { border-color:#eab308; }
+  .prod.libre { border-color:#22c55e; }
+  .prod .foto { height:150px; background:#0b1220; display:flex; align-items:center; justify-content:center; color:var(--apagado); font-size:2.5rem; }
+  .prod .foto img { width:100%; height:100%; object-fit:cover; }
+  .prod .cuerpo { padding:10px 12px 12px; flex:1; }
+  .prod h3 { margin:0; font-size:1rem; }
+  .prod .marca { color:var(--apagado); font-size:.85rem; margin-top:2px; }
+  .etq { display:inline-block; margin-top:8px; padding:3px 9px; border-radius:99px; font-weight:700; font-size:.82rem; color:#fff; }
+  .etq.palma { background:#c1121f; } .etq.duda { background:#d97706; } .etq.suave { background:#a16207; }
+  .etq.libre { background:#15803d; } .etq.nodata { background:#475569; }
+  .rspo { display:inline-block; margin-left:6px; font-size:.8rem; color:#86efac; }
+  .hallado { margin-top:8px; font-size:.85rem; line-height:1.4; }
+  details { margin-top:8px; font-size:.85rem; color:#cbd5e1; }
+  summary { cursor:pointer; color:#93c5fd; }
+  details p { margin:6px 0 0; line-height:1.4; }
+  .meta { margin-top:8px; font-size:.75rem; color:var(--apagado); }
+  .aviso { background:#1e293b; border-left:5px solid #f59e0b; border-radius:10px; padding:12px; margin:12px 0; line-height:1.45; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📚 Base del curso</h1>
+  <p>Productos escaneados por la clase</p>
+</header>
+<main>
+  <a class="volver" href="./">← Volver al detector</a>
+  <div id="aviso"></div>
+  <div class="contadores" id="contadores"></div>
+  <div class="barra">
+    <input id="buscar" type="search" placeholder="Buscar por nombre, marca o código">
+    <button class="act" id="recargar" type="button">↻</button>
+  </div>
+  <div id="estado"></div>
+  <div class="rejilla" id="rejilla"></div>
+</main>
+<script src="config.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const CFG = window.CONFIG || {};
+  const NIVELES = [
+    ["todos", "Todos"],
+    ["palma", "🔴 Con palma"],
+    ["duda", "🟠 Posible palma"],
+    ["suave", "🟡 Quizá tenga"],
+    ["libre", "✅ Sin palma"],
+    ["nodata", "❓ Sin datos"]
+  ];
+  const ETIQUETA = { palma: "🔴 Contiene palma", duda: "🟠 Posible palma", suave: "🟡 Quizá tenga palma", libre: "✅ Sin palma detectada", nodata: "❓ Sin datos" };
+  let productos = [];
+  let filtro = "todos";
+
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const urlSegura = (u) => (/^https:\/\//.test(u || "") ? u : "");
+
+  function pintarContadores() {
+    const n = { todos: productos.length, palma: 0, duda: 0, suave: 0, libre: 0, nodata: 0 };
+    productos.forEach((p) => { if (n[p.veredicto] !== undefined) n[p.veredicto]++; });
+    $("contadores").innerHTML = NIVELES.map(([k, t]) =>
+      '<button type="button" class="cont c-' + k + (filtro === k ? " activo" : "") + '" data-k="' + k + '"><b>' + n[k] + "</b><span>" + t + "</span></button>"
+    ).join("");
+  }
+
+  function lista(titulo, a) {
+    return a && a.length ? "<div><b>" + titulo + "</b> " + a.map(esc).join("; ") + "</div>" : "";
+  }
+
+  function pintar() {
+    pintarContadores();
+    const q = $("buscar").value.trim().toLowerCase();
+    const ver = productos.filter((p) =>
+      (filtro === "todos" || p.veredicto === filtro) &&
+      (!q || [p.nombre, p.marca, p.codigo].join(" ").toLowerCase().includes(q))
+    ).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+    $("rejilla").innerHTML = ver.map((p) => {
+      const foto = urlSegura(p.fotoFrente);
+      const ing = urlSegura(p.fotoIngredientes);
+      const nivel = ETIQUETA[p.veredicto] ? p.veredicto : "nodata";
+      return '<article class="prod ' + nivel + '">'
+        + '<div class="foto">' + (foto ? '<img loading="lazy" alt="Carátula" src="' + esc(foto) + '">' : "📦") + "</div>"
+        + '<div class="cuerpo"><h3>' + esc(p.nombre) + "</h3>"
+        + '<div class="marca">' + esc(p.marca) + "</div>"
+        + '<span class="etq ' + nivel + '">' + ETIQUETA[nivel] + "</span>" + (p.rspo ? '<span class="rspo">🌱 RSPO</span>' : "")
+        + '<div class="hallado">' + lista("Con palma:", p.palma) + lista("Posible:", p.duda) + lista("Suele ser de palma:", p.suave) + "</div>"
+        + (p.ingredientes ? "<details><summary>Ver ingredientes</summary><p>" + esc(p.ingredientes) + "</p>"
+          + (ing ? '<p><a href="' + esc(ing) + '" target="_blank" rel="noopener" style="color:#93c5fd">Foto de la etiqueta</a></p>' : "") + "</details>" : "")
+        + '<div class="meta">' + esc(p.codigo) + (p.alumno ? " · " + esc(p.alumno) : "") + (p.fecha ? " · " + esc(String(p.fecha).slice(0, 10)) : "") + "</div>"
+        + "</div></article>";
+    }).join("");
+    $("estado").textContent = ver.length ? "" : (productos.length ? "Ningún producto coincide." : "Todavía no hay productos guardados.");
+  }
+
+  function localComoLista() {
+    try { return Object.values(JSON.parse(localStorage.getItem("baseLocal") || "{}")); } catch (e) { return []; }
+  }
+
+  async function cargar() {
+    $("estado").textContent = "Cargando…";
+    if (!CFG.BASE_URL) {
+      $("aviso").innerHTML = '<div class="aviso">Todavía no se conectó el servidor de la clase. Aquí solo se ven los productos guardados en este celular.</div>';
+      productos = localComoLista();
+      pintar();
+      return;
+    }
+    $("aviso").innerHTML = "";
+    try {
+      const resp = await fetch(CFG.BASE_URL);
+      const datos = await resp.json();
+      if (!datos.ok) throw new Error(datos.error || "error");
+      productos = datos.productos;
+      pintar();
+    } catch (e) {
+      productos = localComoLista();
+      $("aviso").innerHTML = '<div class="aviso">No se pudo cargar la base de la clase. Revisa tu internet y toca ↻.</div>';
+      pintar();
+    }
+  }
+
+  $("contadores").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-k]");
+    if (b) { filtro = b.dataset.k; pintar(); }
+  });
+  $("buscar").addEventListener("input", pintar);
+  $("recargar").addEventListener("click", cargar);
+  cargar();
+})();
+</script>
+</body>
+</html>
