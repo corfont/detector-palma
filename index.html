@@ -476,6 +476,7 @@
     cont.className = "visible " + tipo;
     vista = { tipo, producto, texto, origen, deFoto: fuente === "foto" };
     $("btnGuardar").style.display = codigoActual ? "block" : "none";
+    $("btnGuardar").textContent = datosDe === "base del curso" ? "📷 Corregir ingredientes / cambiar fotos" : "💾 Guardar en la base del curso";
     const off = origen === "cosmetico" ? "https://world.openbeautyfacts.org" : "https://world.openfoodfacts.org";
     $("lnkOff").href = off + "/cgi/product.pl?type=add&code=" + encodeURIComponent(codigoActual || "");
     $("lnkOff").style.display = codigoActual && datosDe !== "base del curso" ? "block" : "none";
