@@ -28,7 +28,7 @@
   .prod { background:var(--tarjeta); border-radius:14px; overflow:hidden; border-top:6px solid #475569; display:flex; flex-direction:column; }
   .prod.palma { border-color:#e5383b; } .prod.duda { border-color:#f59e0b; } .prod.suave { border-color:#eab308; }
   .prod.libre { border-color:#22c55e; }
-  .prod .foto { height:150px; background:#0b1220; display:flex; align-items:center; justify-content:center; color:var(--apagado); font-size:2.5rem; }
+  .prod .foto { height:150px; background:#0b1220; display:flex; flex-direction:column; text-align:center; align-items:center; justify-content:center; color:var(--apagado); font-size:2.5rem; }
   .prod .foto img { width:100%; height:100%; object-fit:cover; }
   .prod .cuerpo { padding:10px 12px 12px; flex:1; }
   .prod h3 { margin:0; font-size:1rem; }
@@ -105,7 +105,7 @@
       const ing = urlSegura(p.fotoIngredientes);
       const nivel = ETIQUETA[p.veredicto] ? p.veredicto : "nodata";
       return '<article class="prod ' + nivel + '">'
-        + '<div class="foto">' + (foto ? '<img loading="lazy" alt="Carátula" src="' + esc(foto) + '">' : "📦") + "</div>"
+        + '<div class="foto">' + (foto ? '<img loading="lazy" alt="Carátula" src="' + esc(foto) + '">' : "📦<br><small style=\"font-size:.75rem\">Sin foto</small>") + "</div>"
         + '<div class="cuerpo"><h3>' + esc(p.nombre) + "</h3>"
         + '<div class="marca">' + esc(p.marca) + "</div>"
         + '<span class="etq ' + nivel + '">' + ETIQUETA[nivel] + "</span>" + (p.rspo ? '<span class="rspo">🌱 RSPO</span>' : "")

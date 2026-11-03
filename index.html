@@ -291,6 +291,8 @@
   let codigoActual = null;  // código de barras del producto que se está mostrando
   let infoActual = { nombre: "", marca: "" };
   let datosDe = "";         // de dónde salieron los datos: "Open Food Facts", "base del curso", etc.
+  let fotoIngPendiente = ""; // foto de ingredientes tomada en la pantalla de resultado, para adjuntarla al guardar
+  let avisoSinCaratula = false;
   let vista = { tipo: "nodata", producto: null, texto: "", origen: null, deFoto: false };
   let ocupado = false;      // true mientras se consulta o se muestra un resultado
   let textoDeFoto = false;  // true si el texto del recuadro salió de leer una foto
@@ -542,6 +544,7 @@
     codigoActual = null;
     infoActual = { nombre: "", marca: "" };
     datosDe = "";
+    fotoIngPendiente = "";
     $("guardar").classList.remove("visible");
     $("ingManual").value = "";
     $("estadoOcr").textContent = "";
@@ -940,6 +943,7 @@
     $("btnFoto").disabled = true;
     try {
       estado.textContent = "Preparando el lector de texto (la primera vez tarda un poco)…";
+      try { fotoIngPendiente = await fotoADataUrl(archivo, 1000, 0.7); } catch (e) { fotoIngPendiente = ""; }
       const lienzo = await prepararFoto(archivo);
       const bruto = await leerTextoMejor(archivo, lienzo, (p) => { estado.textContent = p < 0 ? "Leyendo ingredientes…" : "Leyendo ingredientes… " + p + "%"; });
       const texto = limpiarTextoOCR(bruto);
@@ -1000,8 +1004,10 @@
     iniciarAudio();
     detenerSirena();
     fotoFrenteData = "";
-    fotoIngData = "";
+    fotoIngData = fotoIngPendiente;
+    avisoSinCaratula = false;
     ["prevFrente", "prevIng"].forEach((id) => { $(id).style.display = "none"; $(id).removeAttribute("src"); });
+    if (fotoIngData) { $("prevIng").src = fotoIngData; $("prevIng").style.display = "block"; }
     $("gCodigo").textContent = codigoActual;
     $("gNombre").value = infoActual.nombre;
     $("gMarca").value = infoActual.marca;
@@ -1053,6 +1059,11 @@
     const nombre = $("gNombre").value.trim();
     const estado = $("gEstado");
     if (nombre.length < 2) { estado.textContent = "Escribe el nombre del producto."; $("gNombre").focus(); return; }
+    if (!fotoFrenteData && !avisoSinCaratula) {
+      avisoSinCaratula = true;
+      estado.textContent = "⚠️ Falta la foto de la carátula. Tómala con el botón de arriba, o toca Guardar otra vez para guardar sin ella.";
+      return;
+    }
     const texto = $("gIng").value.trim();
     const origen = tipoElegido();
     const { tipo } = analizar({ ingredients_text: texto }, origen);
@@ -1089,7 +1100,8 @@
       $("rTitulo").dataset.guardado = "1";
       const aviso = document.createElement("div");
       aviso.className = "evaluacion";
-      aviso.textContent = r.actualizado ? "✅ Producto actualizado en la base del curso." : "✅ Producto guardado en la base del curso.";
+      aviso.textContent = (r.actualizado ? "✅ Producto actualizado en la base del curso" : "✅ Producto guardado en la base del curso")
+        + (fotoFrenteData ? " con la foto de la carátula." : ". Sin foto de la carátula: escanéalo otra vez y toca Guardar para agregarla.");
       $("rEvaluacion").prepend(aviso);
     } catch (err) {
       $("btnGuardarOk").disabled = false;
