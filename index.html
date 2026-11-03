@@ -899,6 +899,28 @@
     }
   }
 
+  // Primero el OCR de Google (vía el servidor de la clase); si no está disponible, Tesseract en el celular
+  async function leerTextoMejor(archivo, lienzo, alAvanzar) {
+    if (BASE_URL) {
+      try {
+        alAvanzar(-1);
+        const foto = await fotoADataUrl(archivo, 1600, 0.82);
+        const ctrl = new AbortController();
+        const limite = setTimeout(() => ctrl.abort(), 25000);
+        try {
+          const resp = await fetch(BASE_URL, {
+            method: "POST", signal: ctrl.signal,
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({ accion: "ocr", clave: CFG.CLAVE || "", foto })
+          });
+          const r = await resp.json();
+          if (r.ok && limpiarTextoOCR(r.texto || "").length >= 15) return r.texto;
+        } finally { clearTimeout(limite); }
+      } catch (e) { /* seguimos con el lector del celular */ }
+    }
+    return leerTextoDeFoto(lienzo, alAvanzar);
+  }
+
   // Une los renglones y se queda con lo que va después de "Ingredientes:" / "Ingredients:"
   function limpiarTextoOCR(t) {
     let s = t.replace(/-\s*\n\s*/g, "").replace(/\s*\n\s*/g, " ").replace(/\s{2,}/g, " ").trim();
@@ -919,7 +941,7 @@
     try {
       estado.textContent = "Preparando el lector de texto (la primera vez tarda un poco)…";
       const lienzo = await prepararFoto(archivo);
-      const bruto = await leerTextoDeFoto(lienzo, (p) => { estado.textContent = "Leyendo ingredientes… " + p + "%"; });
+      const bruto = await leerTextoMejor(archivo, lienzo, (p) => { estado.textContent = p < 0 ? "Leyendo ingredientes…" : "Leyendo ingredientes… " + p + "%"; });
       const texto = limpiarTextoOCR(bruto);
       if (texto.length < 15) {
         estado.textContent = "No se pudo leer. Acerca la cámara, con buena luz y sin reflejos, e intenta de nuevo.";
@@ -1008,7 +1030,7 @@
       $("btnFotoIng").disabled = true;
       estado.textContent = "Preparando el lector de texto (la primera vez tarda un poco)…";
       const lienzo = await prepararFoto(archivo);
-      const bruto = await leerTextoDeFoto(lienzo, (p) => { estado.textContent = "Leyendo ingredientes… " + p + "%"; });
+      const bruto = await leerTextoMejor(archivo, lienzo, (p) => { estado.textContent = p < 0 ? "Leyendo ingredientes…" : "Leyendo ingredientes… " + p + "%"; });
       const texto = limpiarTextoOCR(bruto);
       if (texto.length < 15) {
         estado.textContent = "La foto se guardó, pero no se pudo leer el texto. Acércate con buena luz o escribe los ingredientes.";

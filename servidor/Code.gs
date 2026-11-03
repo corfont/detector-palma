@@ -71,6 +71,25 @@ function seguro_(s) {
   return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
+// Lee el texto de una foto con el OCR de Google Drive (mucho mejor que el del celular).
+// Requiere activar el servicio avanzado "Drive API" en el editor de Apps Script (ver LEEME.md).
+function leerTexto_(dataUrl) {
+  const m = /^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+\/=]+)$/.exec(String(dataUrl || ''));
+  if (!m || String(dataUrl).length > MAX_FOTO) return { ok: false, error: 'foto' };
+  let id = null;
+  try {
+    const blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], 'ocr.jpg');
+    const f = Drive.Files.insert({ title: 'ocr-temporal', mimeType: m[1] }, blob, { ocr: true, ocrLanguage: 'es' });
+    id = f.id;
+    const texto = DocumentApp.openById(id).getBody().getText();
+    return { ok: true, texto: texto };
+  } catch (err) {
+    return { ok: false, error: 'ocr: ' + String(err).slice(0, 100) };
+  } finally {
+    if (id) { try { Drive.Files.remove(id); } catch (x) { /* nada */ } }
+  }
+}
+
 function sinCeros_(v) {
   return String(v).replace(/^0+/, '');
 }
@@ -82,6 +101,7 @@ function doPost(e) {
     const d = JSON.parse(e.postData.contents);
 
     if (CLAVE && d.clave !== CLAVE) return respuesta_({ ok: false, error: 'clave' });
+    if (d.accion === 'ocr') return respuesta_(leerTexto_(d.foto));
 
     const codigo = texto_(d.codigo, 20);
     if (!/^\d{8,14}$/.test(codigo)) return respuesta_({ ok: false, error: 'codigo' });

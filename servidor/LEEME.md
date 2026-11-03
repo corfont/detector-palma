@@ -20,6 +20,17 @@ pequeño script que la maneja. Es gratis.
    - **Implementar** y copia la **URL de la aplicación web** (termina en `/exec`).
 6. **Pásame esa URL** y yo la pongo en `config.js` y subo el cambio. (O pégala tú en `BASE_URL` de `config.js`.)
 
+## Lectura de ingredientes mejorada (opcional, recomendada)
+
+La app puede usar el lector de texto de Google Drive, que es mucho mejor que el del celular. Una sola vez:
+
+1. En Apps Script, en la columna izquierda, junto a **Servicios** toca **+**.
+2. Elige **Drive API** (versión **v2**) y toca **Agregar**.
+3. Ejecuta de nuevo la función **configurar** y acepta los permisos nuevos.
+4. **Implementar → Administrar implementaciones → ✏️ → Nueva versión → Implementar**.
+
+Si esto no está activado, la app sigue funcionando con el lector del celular.
+
 ## Cómo se usa
 
 - Escanea un producto. Toca **💾 Guardar en la base del curso**.
