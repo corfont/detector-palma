@@ -1,0 +1,6 @@
+Lector de códigos de barras alojado en esta misma web (no depende de ningún sitio externo).
+
+- barcode-detector.js  -> paquete "barcode-detector" 3.2.3 (licencia MIT), versión iife del ponyfill
+- zxing_reader.wasm    -> paquete "zxing-wasm" 3.1.6 (licencia MIT), basado en zxing-cpp (Apache-2.0)
+
+Se usa solo cuando el navegador no trae su propio lector de códigos de barras (por ejemplo, Safari en iPhone).

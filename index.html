@@ -27,7 +27,13 @@
   header p { margin: 6px 0 0; color: #94a3b8; font-size: .95rem; }
   main { max-width: 520px; margin: 0 auto; padding: 12px 16px 40px; }
   .tarjeta { background: var(--tarjeta); border-radius: 16px; padding: 16px; margin-top: 14px; }
-  #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; min-height: 0; }
+  #reader { position: relative; display: none; width: 100%; border-radius: 12px; overflow: hidden; background: #000; }
+  #reader.activo { display: block; }
+  #reader video { display: block; width: 100%; max-height: 60vh; object-fit: cover; }
+  #reader .mira {
+    position: absolute; left: 8%; right: 8%; top: 28%; bottom: 28%; pointer-events: none;
+    border: 3px solid rgba(255,255,255,.9); border-radius: 10px; box-shadow: 0 0 0 9999px rgba(0,0,0,.25);
+  }
   button {
     font: inherit; font-weight: 700; border: 0; border-radius: 12px;
     padding: 14px 18px; cursor: pointer; width: 100%;
@@ -133,7 +139,7 @@
 
 <main>
   <div class="tarjeta">
-    <div id="reader"></div>
+    <div id="reader"><video id="video" playsinline muted autoplay></video><div class="mira"></div></div>
     <button id="btnEscanear" style="margin-top:12px">📷 Escanear producto</button>
     <p id="estado"></p>
   </div>
@@ -194,12 +200,10 @@
   <button id="btnCerrar">Escanear otro producto</button>
 </div>
 
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
 
-  let scanner = null;
   let ocupado = false;      // true mientras se consulta o se muestra un resultado
   let textoDeFoto = false;  // true si el texto del recuadro salió de leer una foto
   let audioCtx = null;
@@ -495,10 +499,52 @@
   }
 
   /* ---------- CÁMARA / CÓDIGO DE BARRAS ---------- */
-  async function detenerEscaneo() {
-    if (scanner && scanner.isScanning) {
-      try { await scanner.stop(); } catch (e) {}
+  // Lector: el propio del navegador si lo tiene (Chrome en Android) y, si no (Safari en iPhone),
+  // zxing-wasm alojado en esta misma web (carpeta vendor/). Se lee todo el cuadro de la cámara.
+  const FORMATOS = ["ean_13", "ean_8", "upc_a", "upc_e"];
+  let detector = null;
+  let flujo = null;        // cámara (MediaStream)
+  let bucle = null;        // temporizador del ciclo de lectura
+  let sinLectura = null;   // aviso si pasa un rato sin leer nada
+  let escaneando = false;
+
+  function cargarScript(src) {
+    return new Promise((ok, mal) => {
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = ok;
+      s.onerror = () => mal(new Error("no se pudo cargar " + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function obtenerDetector() {
+    if (detector) return detector;
+    if ("BarcodeDetector" in window) {
+      try {
+        const soportados = await window.BarcodeDetector.getSupportedFormats();
+        if (FORMATOS.every((f) => soportados.includes(f))) {
+          detector = new window.BarcodeDetector({ formats: FORMATOS });
+          return detector;
+        }
+      } catch (e) { /* seguimos con el lector alojado en la web */ }
     }
+    await cargarScript("vendor/barcode-detector.js");
+    const API = window.BarcodeDetectionAPI;
+    API.setZXingModuleOverrides({
+      locateFile: (nombre, prefijo) => (nombre.endsWith(".wasm") ? "vendor/zxing_reader.wasm" : prefijo + nombre)
+    });
+    detector = new API.BarcodeDetector({ formats: FORMATOS });
+    return detector;
+  }
+
+  async function detenerEscaneo() {
+    escaneando = false;
+    clearTimeout(bucle);
+    clearTimeout(sinLectura);
+    if (flujo) { flujo.getTracks().forEach((t) => t.stop()); flujo = null; }
+    $("video").srcObject = null;
+    $("reader").classList.remove("activo");
   }
 
   async function alLeerCodigo(codigo) {
@@ -508,36 +554,57 @@
     buscarProducto(codigo);
   }
 
+  async function cicloDeLectura() {
+    if (!escaneando) return;
+    const v = $("video");
+    if (v.readyState >= 2 && v.videoWidth) {
+      try {
+        const r = await detector.detect(v);
+        if (escaneando && r.length && r[0].rawValue) { alLeerCodigo(r[0].rawValue); return; }
+      } catch (e) { /* un cuadro que falla no detiene la lectura */ }
+    }
+    if (escaneando) bucle = setTimeout(cicloDeLectura, 120);
+  }
+
   async function iniciarEscaneo() {
     iniciarAudio(); // el navegador exige un toque del usuario antes de permitir sonido
-    if (!window.Html5Qrcode) {
-      $("estado").textContent = "No se cargó la librería del lector. Revisa tu conexión.";
+    if (escaneando) return;
+    const estado = $("estado");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      estado.textContent = "Este navegador no permite usar la cámara. Usa el código manual.";
       return;
     }
-    if (!scanner) {
-      scanner = new Html5Qrcode("reader", {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E
-        ],
-        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-        verbose: false
-      });
-    }
-    if (scanner.isScanning) return;
     try {
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 280, height: 140 } },
-        alLeerCodigo,
-        () => {}
-      );
-      $("estado").textContent = "Apunta al código de barras del producto";
+      estado.textContent = "Preparando el lector…";
+      await obtenerDetector();
     } catch (e) {
-      $("estado").textContent = "No se pudo abrir la cámara. Da permiso al navegador o usa el código manual.";
+      estado.textContent = "No se pudo cargar el lector. Revisa tu internet o usa el código manual.";
+      return;
     }
+    try {
+      flujo = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+      });
+    } catch (e) {
+      estado.textContent = e && e.name === "NotAllowedError"
+        ? "Permiso de cámara denegado. Actívalo en los ajustes del navegador e inténtalo de nuevo."
+        : "No se pudo abrir la cámara. Usa el código manual.";
+      return;
+    }
+    const pista = flujo.getVideoTracks()[0];
+    try { await pista.applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch (e) { /* no todos los celulares lo permiten */ }
+    const v = $("video");
+    v.srcObject = flujo;
+    try { await v.play(); } catch (e) {}
+    $("reader").classList.add("activo");
+    escaneando = true;
+    estado.textContent = "Apunta al código de barras";
+    clearTimeout(sinLectura);
+    sinLectura = setTimeout(() => {
+      if (escaneando) estado.textContent = "¿No lee? Aleja el celular unos 15–20 cm hasta que las barras se vean nítidas y evita reflejos. También puedes escribir el código abajo.";
+    }, 8000);
+    cicloDeLectura();
   }
 
   /* ---------- LOGO Y MARCA DE AGUA ---------- */
