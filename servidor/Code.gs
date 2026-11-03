@@ -71,6 +71,10 @@ function seguro_(s) {
   return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
+function sinCeros_(v) {
+  return String(v).replace(/^0+/, '');
+}
+
 function doPost(e) {
   const candado = LockService.getScriptLock();
   try {
@@ -92,7 +96,7 @@ function doPost(e) {
     const datos = hoja.getDataRange().getValues();
     let fila = -1;
     for (let i = 1; i < datos.length; i++) {
-      if (String(datos[i][COL['Código']]) === codigo) { fila = i + 1; break; }
+      if (sinCeros_(datos[i][COL['Código']]) === sinCeros_(codigo)) { fila = i + 1; break; }
     }
     const previa = fila > 0 ? datos[fila - 1] : null;
 
@@ -117,9 +121,10 @@ function doPost(e) {
     registro[COL['Alumno']] = seguro_(texto_(d.alumno, 40).trim());
     registro[COL['Veces']] = previa ? (Number(previa[COL['Veces']]) || 1) + 1 : 1;
 
-    if (fila > 0) hoja.getRange(fila, 1, 1, COLUMNAS.length).setValues([registro]);
-    else hoja.appendRow(registro);
-    return respuesta_({ ok: true, actualizado: fila > 0 });
+    if (fila < 0) fila = hoja.getLastRow() + 1;
+    hoja.getRange(fila, COL['Código'] + 1).setNumberFormat('@'); // texto, para no perder ceros iniciales
+    hoja.getRange(fila, 1, 1, COLUMNAS.length).setValues([registro]);
+    return respuesta_({ ok: true, actualizado: !!previa });
   } catch (err) {
     return respuesta_({ ok: false, error: 'servidor: ' + String(err).slice(0, 120) });
   } finally {

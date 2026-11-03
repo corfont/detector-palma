@@ -600,7 +600,8 @@
   async function buscarEnBase(codigo) {
     let remoto = [];
     try { remoto = await listaRemota(); } catch (e) { /* si no responde seguimos con las otras bases */ }
-    return remoto.find((p) => p.codigo === codigo) || leerLocal()[codigo] || null;
+    const sc = (v) => String(v).replace(/^0+/, ""); // Sheets puede quitar ceros iniciales
+    return remoto.find((p) => sc(p.codigo) === sc(codigo)) || leerLocal()[codigo] || null;
   }
 
   // Convierte un registro de la base del curso al formato de Open Food Facts que ya sabe mostrar la pantalla

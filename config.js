@@ -3,6 +3,6 @@
 //           se guardan solo en el celular. Ver servidor/LEEME.md para crearla.
 // CLAVE:    debe ser igual a la constante CLAVE de servidor/Code.gs.
 window.CONFIG = {
-  BASE_URL: "",
+  BASE_URL: "https://script.google.com/macros/s/AKfycbwzbtRyXTnedK7DGGCuPentWlmLtIkjIRyh1m4drJMzjdcZWoEIRGtrvtRX8KBnnltM/exec",
   CLAVE: "palma2026"
 };
